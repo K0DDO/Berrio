@@ -41,36 +41,15 @@ class FamilyAccessService:
         return member
 
     async def visible_user_ids(self, actor_id: UUID, family_id: UUID) -> list[UUID]:
-        """
-        CHILD → only self.
-        PARENT/OWNER with can_view_children → self + children.
-        Otherwise → self.
-        """
-        member = await self.member_of(actor_id, family_id)
-        if member is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not a family member")
-
-        if member.role == FamilyRole.CHILD:
-            return [actor_id]
-
-        can_view = False
-        result = await self._session.execute(
-            select(FamilyPermission).where(
-                FamilyPermission.member_id == member.id,
-                FamilyPermission.permission_key == "can_view_children",
-            )
+        """Deprecated wrapper — use FamilyPermissionChecker.resolve_scope."""
+        from app.modules.families.permission_checker import (
+            FamilyPermissionChecker,
+            FamilyPermissionKey,
         )
-        perm = result.scalar_one_or_none()
-        can_view = bool(perm and perm.allowed) or member.role == FamilyRole.OWNER
 
-        if not can_view:
-            return [actor_id]
-
-        members = await self._session.execute(
-            select(FamilyMember).where(FamilyMember.family_id == family_id)
+        checker = FamilyPermissionChecker(self._session)
+        return await checker.resolve_scope(
+            actor_id=actor_id,
+            family_id=family_id,
+            permission=FamilyPermissionKey.CAN_VIEW_CHILDREN,
         )
-        ids = [actor_id]
-        for m in members.scalars().all():
-            if m.role == FamilyRole.CHILD and m.user_id not in ids:
-                ids.append(m.user_id)
-        return ids

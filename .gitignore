@@ -17,8 +17,7 @@ mobile/.packages
 mobile/build/
 mobile/.pub-cache/
 mobile/.pub/
-mobile/**/*.g.dart
-mobile/**/*.freezed.dart
+# Drift/freezed outputs are committed so CI and clones build without codegen.
 
 # IDE / OS
 .idea/

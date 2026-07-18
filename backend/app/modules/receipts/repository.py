@@ -59,19 +59,29 @@ class ReceiptRepository:
         await self._session.flush()
         return receipt
 
-    async def list_for_user(self, user_id: UUID, *, limit: int = 50, offset: int = 0) -> tuple[list[Receipt], int]:
+    async def list_for_users(
+        self, user_ids: list[UUID], *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[Receipt], int]:
         total = await self._session.scalar(
-            select(func.count()).select_from(Receipt).where(Receipt.user_id == user_id)
+            select(func.count()).select_from(Receipt).where(Receipt.user_id.in_(user_ids))
         )
         result = await self._session.execute(
             select(Receipt)
             .options(selectinload(Receipt.items))
-            .where(Receipt.user_id == user_id)
+            .where(Receipt.user_id.in_(user_ids))
             .order_by(Receipt.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
         return list(result.scalars().all()), int(total or 0)
+
+    async def get_for_users(self, receipt_id: UUID, user_ids: list[UUID]) -> Receipt | None:
+        result = await self._session.execute(
+            select(Receipt)
+            .options(selectinload(Receipt.items))
+            .where(Receipt.id == receipt_id, Receipt.user_id.in_(user_ids))
+        )
+        return result.scalar_one_or_none()
 
     async def add_item(self, item: ReceiptItem) -> ReceiptItem:
         self._session.add(item)

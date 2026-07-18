@@ -135,9 +135,12 @@ class BankService:
         return saved
 
     async def list_transactions(self, user_id: UUID) -> list[Transaction]:
+        return await self.list_transactions_for_users([user_id])
+
+    async def list_transactions_for_users(self, user_ids: list[UUID]) -> list[Transaction]:
         result = await self._session.execute(
             select(Transaction)
-            .where(Transaction.user_id == user_id)
+            .where(Transaction.user_id.in_(user_ids))
             .order_by(Transaction.booked_at.desc())
         )
         return list(result.scalars().all())

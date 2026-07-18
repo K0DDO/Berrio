@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.modules.auth.dependencies import get_current_user_id
+from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
 from app.modules.receipts.schemas import ReceiptListOut, ReceiptOut, ReceiptScanRequest
 from app.modules.receipts.service import ReceiptService
 
@@ -31,11 +32,19 @@ async def scan_receipt(
 @router.get("", response_model=ReceiptListOut)
 async def list_receipts(
     user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[ReceiptService, Depends(get_receipt_service)],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    family_id: Annotated[UUID | None, Query()] = None,
 ) -> ReceiptListOut:
-    items, total = await service.list(user_id, limit=limit, offset=offset)
+    checker = FamilyPermissionChecker(session)
+    scope = await checker.resolve_scope(
+        actor_id=user_id,
+        family_id=family_id,
+        permission=FamilyPermissionKey.RECEIPTS,
+    )
+    items, total = await service.list(user_id, limit=limit, offset=offset, scope_user_ids=scope)
     return ReceiptListOut(items=items, total=total)
 
 
@@ -43,6 +52,14 @@ async def list_receipts(
 async def get_receipt(
     receipt_id: UUID,
     user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[ReceiptService, Depends(get_receipt_service)],
+    family_id: Annotated[UUID | None, Query()] = None,
 ) -> ReceiptOut:
-    return await service.get(user_id, receipt_id)
+    checker = FamilyPermissionChecker(session)
+    scope = await checker.resolve_scope(
+        actor_id=user_id,
+        family_id=family_id,
+        permission=FamilyPermissionKey.RECEIPTS,
+    )
+    return await service.get(user_id, receipt_id, scope_user_ids=scope)

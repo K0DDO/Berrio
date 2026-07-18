@@ -14,6 +14,7 @@ import '../features/financial_health/presentation/financial_health_screen.dart';
 import '../features/goals/presentation/goals_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
+import '../features/receipts/presentation/receipts_history_screen.dart';
 import '../features/receipts/presentation/scan_receipt_screen.dart';
 import '../shared/widgets/app_shell.dart';
 
@@ -93,9 +94,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'family',
                     builder: (context, state) => const FamilyScreen(),
                   ),
+                  GoRoute(
+                    path: 'receipts',
+                    builder: (context, state) => const ReceiptsHistoryScreen(),
+                  ),
                 ],
               ),
             ],
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/receipts',
+        builder: (context, state) => const ReceiptsHistoryScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (context, state) => ReceiptDetailScreen(
+              receiptId: state.pathParameters['id']!,
+            ),
           ),
         ],
       ),
@@ -131,6 +148,7 @@ class _MoreHubScreen extends ConsumerWidget {
       ),
       (title: 'Budgets', path: '/more/budgets', icon: Icons.pie_chart_outline),
       (title: 'Family', path: '/more/family', icon: Icons.family_restroom),
+      (title: 'Receipts', path: '/receipts', icon: Icons.receipt_long),
     ];
 
     return Scaffold(

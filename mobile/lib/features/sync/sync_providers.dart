@@ -1,32 +1,54 @@
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/database/app_database.dart';
 import '../../core/network/dio_client.dart';
-import '../../receipts/data/receipts_api.dart';
-import 'data/in_memory_sync_queue.dart';
+import '../receipts/data/local_receipts_dao.dart';
+import '../receipts/data/receipts_api.dart';
+import 'data/drift_sync_queue.dart';
 import 'domain/sync_job.dart';
 import 'domain/sync_queue_repository.dart';
 
 abstract class SyncEngine {
   Future<void> enqueueReceiptScan(Map<String, dynamic> qrPayload);
   Future<int> drainPending();
+  Future<void> syncWhenOnline();
 }
 
-/// Offline-first: queue locally, push to API when [drainPending] runs.
+/// Offline-first pipeline:
+/// User action → Local database → Sync queue → Backend API → Mark synced.
 class ReceiptSyncEngine implements SyncEngine {
-  ReceiptSyncEngine(this._queue, this._receiptsApi);
+  ReceiptSyncEngine(
+    this._queue,
+    this._localReceipts,
+    this._receiptsApi,
+    this._connectivity,
+  );
 
   final SyncQueueRepository _queue;
+  final LocalReceiptsDao _localReceipts;
   final ReceiptsApi _receiptsApi;
+  final Connectivity _connectivity;
 
   @override
   Future<void> enqueueReceiptScan(Map<String, dynamic> qrPayload) async {
     final key = '${qrPayload['fn']}_${qrPayload['fd']}_${qrPayload['fp']}';
+    final payloadJson = jsonEncode({...qrPayload, 'idempotency_key': key});
+
+    await _localReceipts.upsertPending(
+      fn: qrPayload['fn'] as String,
+      fd: qrPayload['fd'] as String,
+      fp: qrPayload['fp'] as String,
+      totalAmount: qrPayload['total_amount']?.toString(),
+      payloadJson: payloadJson,
+    );
+
     await _queue.enqueue(
       type: 'RECEIPT_SCAN',
-      payloadJson: jsonEncode({...qrPayload, 'idempotency_key': key}),
+      payloadJson: payloadJson,
       idempotencyKey: key,
     );
   }
@@ -40,7 +62,16 @@ class ReceiptSyncEngine implements SyncEngine {
       try {
         if (job.type == 'RECEIPT_SCAN') {
           final payload = jsonDecode(job.payloadJson) as Map<String, dynamic>;
-          await _receiptsApi.scan(payload);
+          final receipt = await _receiptsApi.scan(payload);
+          await _localReceipts.markSynced(
+            fn: receipt.fn,
+            fd: receipt.fd,
+            fp: receipt.fp,
+            serverId: receipt.id,
+            status: receipt.status,
+            storeName: receipt.storeName,
+            totalAmount: receipt.totalAmount,
+          );
         }
         await _queue.markStatus(job.id, SyncJobStatus.done);
         done++;
@@ -62,10 +93,29 @@ class ReceiptSyncEngine implements SyncEngine {
     }
     return done;
   }
+
+  @override
+  Future<void> syncWhenOnline() async {
+    final result = await _connectivity.checkConnectivity();
+    final offline = result.every((r) => r == ConnectivityResult.none);
+    if (!offline) {
+      await drainPending();
+    }
+  }
 }
 
+final appDatabaseProvider = Provider<AppDatabase>((ref) {
+  final db = AppDatabase();
+  ref.onDispose(db.close);
+  return db;
+});
+
 final syncQueueRepositoryProvider = Provider<SyncQueueRepository>((ref) {
-  return InMemorySyncQueueRepository();
+  return DriftSyncQueueRepository(ref.watch(appDatabaseProvider));
+});
+
+final localReceiptsDaoProvider = Provider<LocalReceiptsDao>((ref) {
+  return LocalReceiptsDao(ref.watch(appDatabaseProvider));
 });
 
 final receiptsApiProvider = Provider<ReceiptsApi>((ref) {
@@ -75,6 +125,8 @@ final receiptsApiProvider = Provider<ReceiptsApi>((ref) {
 final syncEngineProvider = Provider<SyncEngine>((ref) {
   return ReceiptSyncEngine(
     ref.watch(syncQueueRepositoryProvider),
+    ref.watch(localReceiptsDaoProvider),
     ref.watch(receiptsApiProvider),
+    Connectivity(),
   );
 });

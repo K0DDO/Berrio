@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
@@ -13,6 +13,7 @@ from app.modules.banks.service import (
     ParseEmailRequest,
     TransactionOut,
 )
+from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
 
 router = APIRouter(prefix="/banks", tags=["banks"])
 
@@ -56,7 +57,14 @@ async def parse_email(
 async def list_transactions(
     user_id: Annotated[UUID, Depends(get_current_user_id)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    family_id: Annotated[UUID | None, Query()] = None,
 ) -> list[TransactionOut]:
+    checker = FamilyPermissionChecker(session)
+    scope = await checker.resolve_scope(
+        actor_id=user_id,
+        family_id=family_id,
+        permission=FamilyPermissionKey.TRANSACTIONS,
+    )
     service = BankService(session)
-    rows = await service.list_transactions(user_id)
+    rows = await service.list_transactions_for_users(scope)
     return [TransactionOut.model_validate(r) for r in rows]

@@ -57,13 +57,20 @@ class AnalyticsService:
         self._session = session
         self._health = FinancialHealthService(session)
 
-    async def summary(self, user_id: UUID, *, period: str = "month") -> AnalyticsSummaryOut:
+    async def summary(
+        self,
+        user_id: UUID,
+        *,
+        period: str = "month",
+        scope_user_ids: list[UUID] | None = None,
+    ) -> AnalyticsSummaryOut:
         start, end = _period_bounds(period)
+        ids = scope_user_ids or [user_id]
         result = await self._session.execute(
             select(Receipt)
             .options(selectinload(Receipt.items))
             .where(
-                Receipt.user_id == user_id,
+                Receipt.user_id.in_(ids),
                 Receipt.status == ReceiptStatus.DONE,
             )
         )

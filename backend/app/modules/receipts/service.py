@@ -141,14 +141,23 @@ class ReceiptService:
         assert refreshed is not None
         return self._to_out(refreshed)
 
-    async def get(self, user_id: UUID, receipt_id: UUID) -> ReceiptOut:
-        receipt = await self._repo.get_by_id(receipt_id, user_id)
+    async def get(self, user_id: UUID, receipt_id: UUID, *, scope_user_ids: list[UUID] | None = None) -> ReceiptOut:
+        ids = scope_user_ids or [user_id]
+        receipt = await self._repo.get_for_users(receipt_id, ids)
         if receipt is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Receipt not found")
         return self._to_out(receipt)
 
-    async def list(self, user_id: UUID, *, limit: int = 50, offset: int = 0) -> tuple[list[ReceiptOut], int]:
-        rows, total = await self._repo.list_for_user(user_id, limit=limit, offset=offset)
+    async def list(
+        self,
+        user_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        scope_user_ids: list[UUID] | None = None,
+    ) -> tuple[list[ReceiptOut], int]:
+        ids = scope_user_ids or [user_id]
+        rows, total = await self._repo.list_for_users(ids, limit=limit, offset=offset)
         return [self._to_out(r) for r in rows], total
 
     def _to_out(self, receipt: Receipt) -> ReceiptOut:
