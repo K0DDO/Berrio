@@ -1,1 +1,1 @@
-"""Families + RBAC + family_permissions. Stage 8."""
+"""Families domain."""

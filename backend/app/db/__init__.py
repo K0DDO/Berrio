@@ -9,6 +9,7 @@ from app.modules.auth.models import (
 )
 from app.modules.banks.models import BankConnection, Transaction
 from app.modules.categories.models import Category, CategoryRule
+from app.modules.families.models import Family, FamilyMember, FamilyPermission
 from app.modules.financial_health.models import FinancialScore
 from app.modules.receipts.models import Receipt, ReceiptItem
 from app.modules.users.models import User
@@ -20,6 +21,9 @@ __all__ = [
     "Category",
     "CategoryRule",
     "EmailVerificationToken",
+    "Family",
+    "FamilyMember",
+    "FamilyPermission",
     "FinancialScore",
     "PasswordResetToken",
     "Receipt",
