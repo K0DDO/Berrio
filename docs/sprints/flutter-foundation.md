@@ -11,11 +11,11 @@ Closed before new finance features:
 
 ## Next roadmap (suggested)
 
-| Priority | Item |
-|----------|------|
-| 1 | Goals + Budgets modules (backend + Flutter screens) |
-| 2 | Notifications / explainable alerts |
-| 3 | Real FNS client (replace stub) when credentials available |
-| 4 | IMAP bank ingestion (credentials) |
-| 5 | Family invites + richer RBAC UI |
-| 6 | Receipt ↔ bank transaction reconciliation |
+| Priority | Item | Status |
+|----------|------|--------|
+| 1 | Goals + Budgets modules (backend + Flutter screens) | In progress / this sprint |
+| 2 | Notifications / explainable alerts | Next |
+| 3 | Real FNS client (replace stub) when credentials available | Blocked on keys |
+| 4 | IMAP bank ingestion (credentials) | Blocked on keys |
+| 5 | Family invites + richer RBAC UI | Later |
+| 6 | Receipt ↔ bank transaction reconciliation | Later |

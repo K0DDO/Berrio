@@ -1,1 +1,5 @@
-"""Budgets domain — period limits per category / overall. Stage 5+."""
+"""Budgets domain — period limits per category / overall."""
+
+from app.modules.budgets.router import router
+
+__all__ = ["router"]

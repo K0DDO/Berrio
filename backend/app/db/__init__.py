@@ -9,9 +9,11 @@ from app.modules.auth.models import (
     RefreshToken,
 )
 from app.modules.banks.models import BankConnection, Transaction
+from app.modules.budgets.models import Budget
 from app.modules.categories.models import Category, CategoryRule
 from app.modules.families.models import Family, FamilyMember, FamilyPermission
 from app.modules.financial_health.models import FinancialScore
+from app.modules.goals.models import FinancialGoal
 from app.modules.products.models import Product, ProductPriceHistory, ProductVariant
 from app.modules.receipts.models import Receipt, ReceiptItem
 from app.modules.users.models import User
@@ -21,12 +23,14 @@ __all__ = [
     "AuditLog",
     "BankConnection",
     "Base",
+    "Budget",
     "Category",
     "CategoryRule",
     "EmailVerificationToken",
     "Family",
     "FamilyMember",
     "FamilyPermission",
+    "FinancialGoal",
     "FinancialScore",
     "PasswordResetToken",
     "Product",

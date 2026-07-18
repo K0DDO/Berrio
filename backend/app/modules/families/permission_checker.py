@@ -34,6 +34,8 @@ class FamilyPermissionKey(StrEnum):
     ANALYTICS = "can_view_family_budget"
     TRANSACTIONS = "can_view_family_budget"
     AI_INSIGHTS = "can_receive_reports"
+    GOALS = "can_manage_goals"
+    BUDGETS = "can_view_family_budget"
 
 
 class FamilyPermissionChecker:
