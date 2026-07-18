@@ -10,7 +10,14 @@ from app.modules.families.permission_checker import (
     FamilyPermissionChecker,
     FamilyPermissionKey,
 )
-from app.modules.receipts.schemas import ReceiptListOut, ReceiptOut, ReceiptScanRequest
+from app.modules.receipts.schemas import (
+    AnalyzeTextRequest,
+    AnalyzeTextResponse,
+    ReceiptConfirmRequest,
+    ReceiptListOut,
+    ReceiptOut,
+    ReceiptScanRequest,
+)
 from app.modules.receipts.service import ReceiptService
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
@@ -30,6 +37,27 @@ async def scan_receipt(
 ) -> ReceiptOut:
     """Accept QR fiscal params only — never upload receipt photos."""
     return await service.scan(user_id, body)
+
+
+@router.post("/analyze-text", response_model=AnalyzeTextResponse)
+async def analyze_receipt_text(
+    body: AnalyzeTextRequest,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    service: Annotated[ReceiptService, Depends(get_receipt_service)],
+) -> AnalyzeTextResponse:
+    """OCR/pasted text → structure → category. Photos are never stored."""
+    return await service.analyze_text(user_id, body)
+
+
+@router.patch("/{receipt_id}/confirm", response_model=ReceiptOut)
+async def confirm_receipt(
+    receipt_id: UUID,
+    body: ReceiptConfirmRequest,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    service: Annotated[ReceiptService, Depends(get_receipt_service)],
+) -> ReceiptOut:
+    """Manual confirmation when confidence is low or FNS data is incomplete."""
+    return await service.confirm(user_id, receipt_id, body)
 
 
 @router.get("", response_model=ReceiptListOut)

@@ -9,6 +9,7 @@ from sqlalchemy import (
     LargeBinary,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -23,6 +24,7 @@ class ReceiptStatus(StrEnum):
     FETCHING = "fetching"
     DONE = "done"
     FAILED = "failed"
+    NEEDS_CONFIRMATION = "needs_confirmation"
 
 
 class Receipt(Base):
@@ -45,6 +47,7 @@ class Receipt(Base):
     store_inn: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=ReceiptStatus.PENDING)
     error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    recognition_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_payload_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

@@ -1,4 +1,7 @@
-"""FNS receipt lookup — stub by default; real HTTP when FNS_API_TOKEN is set."""
+"""FNS receipt lookup — stub by default; real HTTP when FNS_API_TOKEN is set.
+
+CRITICAL: Stub must NEVER invent merchants or line items (no hallucinated groceries).
+"""
 
 from __future__ import annotations
 
@@ -25,11 +28,14 @@ class FnsLineItem:
 
 @dataclass(frozen=True, slots=True)
 class FnsReceiptData:
-    store_name: str
+    store_name: str | None
     store_inn: str | None
     purchased_at: datetime
-    total_amount: Decimal
+    total_amount: Decimal | None
     items: list[FnsLineItem]
+    incomplete: bool = False
+    incomplete_reason: str | None = None
+    source_confidence: float = 1.0
 
 
 class FnsClient:
@@ -48,6 +54,14 @@ class FnsClient:
 
 
 class StubFnsClient(FnsClient):
+    """
+    Local/dev stub when FNS_API_TOKEN is unset.
+
+    Returns ONLY QR-provided facts (optional total / date).
+    Does NOT invent store names or products — that caused dentistry
+    receipts to become «Пятёрочка / молоко / хлеб».
+    """
+
     async def fetch(
         self,
         *,
@@ -58,28 +72,24 @@ class StubFnsClient(FnsClient):
         total_amount: Decimal | None = None,
     ) -> FnsReceiptData:
         when = purchased_at or datetime.now(UTC)
-        total = total_amount if total_amount is not None else Decimal("249.90")
-        milk = (total * Decimal("0.4")).quantize(Decimal("0.01"))
-        bread = (total - milk).quantize(Decimal("0.01"))
+        logger.warning(
+            "fns.stub_incomplete",
+            fn=fn,
+            fd=fd,
+            reason="no OFD token — refusing to invent merchant/items",
+        )
         return FnsReceiptData(
-            store_name="Пятёрочка",
-            store_inn="7728029110",
+            store_name=None,
+            store_inn=None,
             purchased_at=when,
-            total_amount=total,
-            items=[
-                FnsLineItem(
-                    name="Молоко Простоквашино 2.5%",
-                    qty=Decimal("1"),
-                    price=milk,
-                    sum=milk,
-                ),
-                FnsLineItem(
-                    name="Хлеб Бородинский",
-                    qty=Decimal("1"),
-                    price=bread,
-                    sum=bread,
-                ),
-            ],
+            total_amount=total_amount,
+            items=[],
+            incomplete=True,
+            incomplete_reason=(
+                "Нет данных ОФД (stub). Магазин и позиции не подставляются автоматически — "
+                "требуется подтверждение или OCR-текст чека."
+            ),
+            source_confidence=0.2 if total_amount is None else 0.45,
         )
 
 
@@ -114,7 +124,6 @@ class ProverkaChekaFnsClient(FnsClient):
         qrraw = self._build_qrraw(
             fn=fn, fd=fd, fp=fp, purchased_at=purchased_at, total_amount=total_amount
         )
-        # Form-style payload — some plans also accept qrraw alongside discrete fields
         form = {
             "token": self._token,
             "fn": fn,
@@ -171,12 +180,8 @@ class ProverkaChekaFnsClient(FnsClient):
         fallback_when: datetime | None,
         fallback_total: Decimal | None,
     ) -> FnsReceiptData:
-        store = (
-            ticket.get("user")
-            or ticket.get("retailPlace")
-            or ticket.get("store_name")
-            or "Unknown store"
-        )
+        store_raw = ticket.get("user") or ticket.get("retailPlace") or ticket.get("store_name")
+        store = str(store_raw).strip() if store_raw else None
         inn = ticket.get("userInn") or ticket.get("store_inn")
         when = self._parse_dt(ticket.get("dateTime") or ticket.get("date_time")) or (
             fallback_when or datetime.now(UTC)
@@ -188,7 +193,7 @@ class ProverkaChekaFnsClient(FnsClient):
         )
         total = self._money(total_raw)
         if total is None:
-            total = fallback_total or Decimal("0")
+            total = fallback_total
         else:
             total = self._normalize_money_field(total)
 
@@ -196,7 +201,9 @@ class ProverkaChekaFnsClient(FnsClient):
         for row in ticket.get("items") or []:
             if not isinstance(row, dict):
                 continue
-            name = str(row.get("name") or row.get("productName") or "Item")
+            name = str(row.get("name") or row.get("productName") or "").strip()
+            if not name:
+                continue  # never invent item names
             qty = Decimal(str(row.get("quantity") or row.get("qty") or 1))
             price_raw = self._money(row.get("price")) or Decimal("0")
             sum_raw = self._money(row.get("sum"))
@@ -207,15 +214,21 @@ class ProverkaChekaFnsClient(FnsClient):
                 line_sum = (price * qty).quantize(Decimal("0.01"))
             items.append(FnsLineItem(name=name, qty=qty, price=price, sum=line_sum))
 
-        if not items and total > 0:
-            items = [FnsLineItem(name="Purchase", qty=Decimal("1"), price=total, sum=total)]
+        incomplete = not store or not items or total is None
+        reason = None
+        if incomplete:
+            reason = "ОФД вернул неполные данные — требуется подтверждение"
+        conf = 0.95 if not incomplete else 0.55
 
         return FnsReceiptData(
-            store_name=str(store)[:255],
+            store_name=store[:255] if store else None,
             store_inn=str(inn)[:32] if inn else None,
             purchased_at=when if when.tzinfo else when.replace(tzinfo=UTC),
-            total_amount=total.quantize(Decimal("0.01")),
+            total_amount=total.quantize(Decimal("0.01")) if total is not None else None,
             items=items,
+            incomplete=incomplete,
+            incomplete_reason=reason,
+            source_confidence=conf,
         )
 
     @staticmethod

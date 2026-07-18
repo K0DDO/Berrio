@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from app.modules.banks.models import Transaction
 from app.modules.receipts.models import Receipt, ReceiptStatus
 from app.modules.reconciliation.engine import MatchDecision, ReconciliationEngine
+from tests.helpers_receipts import confirm_grocery_receipt
 
 
 @pytest.mark.asyncio
@@ -25,16 +26,14 @@ async def test_dashboard_endpoint(client: AsyncClient) -> None:
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
-    await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={
-            "fn": "d1",
-            "fd": "d2",
-            "fp": "d3",
-            "total_amount": "500.00",
-            "purchased_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        },
+    await confirm_grocery_receipt(
+        client,
+        headers,
+        fn="d1",
+        fd="d2",
+        fp="d3",
+        total="500.00",
+        purchased_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     )
     await client.post(
         "/api/v1/goals",
@@ -138,16 +137,14 @@ async def test_reconciliation_confirm_matched(client: AsyncClient) -> None:
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
-    await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={
-            "fn": "rr1",
-            "fd": "rr2",
-            "fp": "rr3",
-            "total_amount": "1250.50",
-            "purchased_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        },
+    await confirm_grocery_receipt(
+        client,
+        headers,
+        fn="rr1",
+        fd="rr2",
+        fp="rr3",
+        total="1250.50",
+        purchased_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     )
     await client.post(
         "/api/v1/banks/connections",

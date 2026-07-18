@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from app.modules.banks.models import Transaction
 from app.modules.receipts.models import Receipt, ReceiptStatus
 from app.modules.reconciliation.engine import ReconciliationEngine
+from tests.helpers_receipts import confirm_grocery_receipt
 
 
 @pytest.mark.asyncio
@@ -56,18 +57,15 @@ async def test_reconciliation_run_confirm(client: AsyncClient) -> None:
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
-    receipt = await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={
-            "fn": "r1",
-            "fd": "r2",
-            "fp": "r3",
-            "total_amount": "1250.50",
-            "purchased_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        },
+    await confirm_grocery_receipt(
+        client,
+        headers,
+        fn="r1",
+        fd="r2",
+        fp="r3",
+        total="1250.50",
+        purchased_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     )
-    assert receipt.status_code == 201, receipt.text
 
     await client.post(
         "/api/v1/banks/connections",

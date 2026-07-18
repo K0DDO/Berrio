@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
+from tests.helpers_receipts import confirm_grocery_receipt
+
 
 @pytest.mark.asyncio
 async def test_ai_chat_and_insights(client: AsyncClient) -> None:
@@ -14,11 +16,7 @@ async def test_ai_chat_and_insights(client: AsyncClient) -> None:
         },
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
-    await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={"fn": "ai1", "fd": "ai2", "fp": "ai3", "total_amount": "120.00"},
-    )
+    await confirm_grocery_receipt(client, headers, fn="ai1", fd="ai2", fp="ai3", total="120.00")
 
     chat = await client.post(
         "/api/v1/ai/chat",

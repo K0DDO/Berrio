@@ -12,7 +12,7 @@ from app.modules.budgets.schemas import BudgetCreate, BudgetOut, BudgetUpdate
 from app.modules.events import get_event_bus
 from app.modules.events.budget_events import BudgetThresholdExceededEvent
 from app.modules.notifications.service import NotificationService
-from app.modules.receipts.models import Receipt
+from app.modules.receipts.models import Receipt, ReceiptStatus
 
 
 def _period_end(budget: Budget) -> date | None:
@@ -128,6 +128,7 @@ class BudgetService:
         end_date = _period_end(budget)
         stmt = select(func.coalesce(func.sum(Receipt.total_amount), 0)).where(
             Receipt.user_id.in_(scope_user_ids),
+            Receipt.status == ReceiptStatus.DONE,
             Receipt.total_amount.is_not(None),
             Receipt.purchased_at.is_not(None),
             Receipt.purchased_at >= start,

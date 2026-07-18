@@ -1,8 +1,18 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from app.modules.receipts.recognition.models import (
+    AnalyzeTextRequest,
+    AnalyzeTextResponse,
+    ConfidenceField,
+    ReceiptConfirmRequest,
+    RecognizedItem,
+    StructuredReceipt,
+)
 
 
 class ReceiptScanRequest(BaseModel):
@@ -42,6 +52,8 @@ class ReceiptOut(BaseModel):
     store_name: str | None
     store_inn: str | None
     error_message: str | None = None
+    requires_confirmation: bool = False
+    recognition: dict[str, Any] | None = None
     items: list[ReceiptItemOut] = []
     created_at: datetime
 
@@ -51,3 +63,17 @@ class ReceiptOut(BaseModel):
 class ReceiptListOut(BaseModel):
     items: list[ReceiptOut]
     total: int
+
+
+__all__ = [
+    "AnalyzeTextRequest",
+    "AnalyzeTextResponse",
+    "ConfidenceField",
+    "ReceiptConfirmRequest",
+    "ReceiptItemOut",
+    "ReceiptListOut",
+    "ReceiptOut",
+    "ReceiptScanRequest",
+    "RecognizedItem",
+    "StructuredReceipt",
+]

@@ -8,6 +8,7 @@ from httpx import AsyncClient
 
 from app.modules.notifications.models import NotificationSeverity, NotificationType
 from app.modules.notifications.rules import NotificationRulesEngine
+from tests.helpers_receipts import confirm_grocery_receipt
 
 
 async def _auth(client: AsyncClient, email: str) -> dict:
@@ -133,19 +134,16 @@ async def test_budget_check_creates_warning_notification(client: AsyncClient) ->
     tokens = await _auth(client, "notify-budget@berrio.app")
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
-    # Seed spend via receipt
-    receipt = await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={
-            "fn": "nb1",
-            "fd": "nb2",
-            "fp": "nb3",
-            "total_amount": "9000.00",
-            "purchased_at": "2026-07-10T12:00:00Z",
-        },
+    # Seed spend via confirmed receipt (stub never invents items)
+    await confirm_grocery_receipt(
+        client,
+        headers,
+        fn="nb1",
+        fd="nb2",
+        fp="nb3",
+        total="9000.00",
+        purchased_at="2026-07-10T12:00:00Z",
     )
-    assert receipt.status_code == 201, receipt.text
 
     budget = await client.post(
         "/api/v1/budgets",

@@ -18,7 +18,8 @@ from app.modules.budgets.schemas import BudgetCreate
 from app.modules.budgets.service import BudgetService
 from app.modules.goals.schemas import GoalCreate
 from app.modules.goals.service import GoalService
-from app.modules.receipts.schemas import ReceiptScanRequest
+from app.modules.receipts.recognition.models import AnalyzeTextRequest, RecognizedItem
+from app.modules.receipts.schemas import ReceiptConfirmRequest, ReceiptScanRequest
 from app.modules.receipts.service import ReceiptService
 
 logger = structlog.get_logger(__name__)
@@ -71,6 +72,7 @@ async def seed_demo_data(session: AsyncSession) -> dict[str, object]:
     ]
     receipts_created = 0
     for fn, fd, fp, total, days_ago in receipt_specs:
+        # Stub FNS never invents merchants/items — confirm demo lines explicitly.
         out = await receipts.scan(
             user_id,
             ReceiptScanRequest(
@@ -82,8 +84,52 @@ async def seed_demo_data(session: AsyncSession) -> dict[str, object]:
                 idempotency_key=f"seed-{fn}",
             ),
         )
+        if out.status == "needs_confirmation":
+            milk = (total * Decimal("0.4")).quantize(Decimal("0.01"))
+            bread = (total - milk).quantize(Decimal("0.01"))
+            out = await receipts.confirm(
+                user_id,
+                out.id,
+                ReceiptConfirmRequest(
+                    store_name="Пятёрочка",
+                    total_amount=total,
+                    purchased_at=(datetime.now(UTC) - timedelta(days=days_ago)).isoformat(),
+                    items=[
+                        RecognizedItem(
+                            name="Молоко Простоквашино 2.5%",
+                            qty=Decimal("1"),
+                            price=milk,
+                            sum=milk,
+                            confidence=1.0,
+                        ),
+                        RecognizedItem(
+                            name="Хлеб Бородинский",
+                            qty=Decimal("1"),
+                            price=bread,
+                            sum=bread,
+                            confidence=1.0,
+                        ),
+                    ],
+                ),
+            )
         if out.status == "done":
             receipts_created += 1
+
+    await receipts.analyze_text(
+        user_id,
+        AnalyzeTextRequest(
+            raw_text=(
+                "Пятёрочка\n"
+                "Молоко 1 100.00\n"
+                "Хлеб 1 150.00\n"
+                "Итого: 250.00 руб\n"
+            ),
+            fn="seed-ocr-fn",
+            fd="seed-ocr-fd",
+            fp="seed-ocr-fp",
+            persist=True,
+        ),
+    )
 
     goals = GoalService(session)
     if not await goals.list_for_users([user_id]):

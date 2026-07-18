@@ -1,4 +1,4 @@
-"""Real FNS client parsing + factory fallback."""
+"""Real FNS client parsing + factory fallback — stub must not invent data."""
 
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -14,12 +14,14 @@ from app.integrations.fns_client import (
 
 
 @pytest.mark.asyncio
-async def test_stub_client_deterministic() -> None:
+async def test_stub_client_never_invents_merchant_or_items() -> None:
     client = StubFnsClient()
     data = await client.fetch(fn="1", fd="2", fp="3", total_amount=Decimal("100.00"))
-    assert data.store_name == "Пятёрочка"
+    assert data.store_name is None
+    assert data.items == []
+    assert data.incomplete is True
     assert data.total_amount == Decimal("100.00")
-    assert len(data.items) == 2
+    assert data.source_confidence < 0.7
 
 
 @pytest.mark.asyncio
@@ -62,6 +64,7 @@ async def test_proverkacheka_parses_json_payload() -> None:
     assert data.total_amount == Decimal("250.00")
     assert data.items[0].price == Decimal("100.00")
     assert len(data.items) == 2
+    assert data.incomplete is False
     mock_client.post.assert_awaited()
 
 

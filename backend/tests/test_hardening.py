@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
+from tests.helpers_receipts import confirm_grocery_receipt
+
 
 @pytest.mark.asyncio
 async def test_scan_creates_product_variants(client: AsyncClient) -> None:
@@ -14,13 +16,10 @@ async def test_scan_creates_product_variants(client: AsyncClient) -> None:
         },
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
-    scan = await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={"fn": "pv1", "fd": "pv2", "fp": "pv3", "total_amount": "100.00"},
+    body = await confirm_grocery_receipt(
+        client, headers, fn="pv1", fd="pv2", fp="pv3", total="100.00"
     )
-    assert scan.status_code == 201, scan.text
-    items = scan.json()["items"]
+    items = body["items"]
     assert len(items) >= 1
     assert all(i.get("product_variant_id") is not None for i in items)
 
@@ -37,11 +36,7 @@ async def test_ai_insights_persisted(client: AsyncClient) -> None:
         },
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
-    await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={"fn": "aix", "fd": "aiy", "fp": "aiz", "total_amount": "80.00"},
-    )
+    await confirm_grocery_receipt(client, headers, fn="aix", fd="aiy", fp="aiz", total="80.00")
     first = await client.get("/api/v1/ai/insights", headers=headers)
     assert first.status_code == 200
     assert len(first.json()) >= 1
@@ -88,11 +83,7 @@ async def test_health_score_uses_receipt_spend(client: AsyncClient) -> None:
         },
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
-    await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={"fn": "h1", "fd": "h2", "fp": "h3", "total_amount": "200.00"},
-    )
+    await confirm_grocery_receipt(client, headers, fn="h1", fd="h2", fp="h3", total="200.00")
     score = await client.get("/api/v1/financial-health/score", headers=headers)
     assert score.status_code == 200
     body = score.json()

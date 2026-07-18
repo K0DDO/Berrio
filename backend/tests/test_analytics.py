@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
+from tests.helpers_receipts import confirm_grocery_receipt
+
 
 async def _auth(client: AsyncClient) -> dict:
     res = await client.post(
@@ -20,11 +22,7 @@ async def _auth(client: AsyncClient) -> dict:
 async def test_analytics_summary_after_receipt(client: AsyncClient) -> None:
     tokens = await _auth(client)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={"fn": "an1", "fd": "an2", "fp": "an3", "total_amount": "250.00"},
-    )
+    await confirm_grocery_receipt(client, headers, fn="an1", fd="an2", fp="an3")
     summary = await client.get("/api/v1/analytics/summary?period=month", headers=headers)
     assert summary.status_code == 200, summary.text
     body = summary.json()

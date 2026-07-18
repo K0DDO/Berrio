@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
+from tests.helpers_receipts import confirm_grocery_receipt
+
 
 async def _auth(client: AsyncClient, email: str) -> dict:
     res = await client.post(
@@ -20,15 +22,9 @@ async def _auth(client: AsyncClient, email: str) -> dict:
 async def test_receipt_items_get_categories(client: AsyncClient) -> None:
     tokens = await _auth(client, "cat1@berrio.app")
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    scan = await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={"fn": "c1", "fd": "c2", "fp": "c3", "total_amount": "100.00"},
-    )
-    assert scan.status_code == 201
-    items = scan.json()["items"]
+    body = await confirm_grocery_receipt(client, headers, fn="c1", fd="c2", fp="c3", total="100.00")
+    items = body["items"]
     assert len(items) == 2
-    # Milk should map to dairy via system rule
     milk = next(i for i in items if "Молоко" in i["name_raw"])
     assert milk["category_id"] is not None
 
@@ -51,12 +47,8 @@ async def test_preview_and_override_creates_user_rule(client: AsyncClient) -> No
     assert preview.status_code == 200
     assert preview.json()["source"] in {"rules", "user_rule", "ai", "unknown"}
 
-    scan = await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={"fn": "x", "fd": "y", "fp": "z", "total_amount": "50.00"},
-    )
-    item_id = scan.json()["items"][0]["id"]
+    body = await confirm_grocery_receipt(client, headers, fn="x", fd="y", fp="z", total="50.00")
+    item_id = body["items"][0]["id"]
 
     override = await client.post(
         f"/api/v1/receipt-items/{item_id}/category",
@@ -65,6 +57,3 @@ async def test_preview_and_override_creates_user_rule(client: AsyncClient) -> No
     )
     assert override.status_code == 200
     assert override.json()["slug"] == "food.cafe"
-
-    # New item with same name should follow user rule preference on next scan
-    # (user rule pattern = full name_raw of first item)

@@ -15,6 +15,7 @@ from tests.fixtures.beta_dataset import (
     STORES,
     TRANSACTIONS,
 )
+from tests.helpers_receipts import confirm_grocery_receipt
 
 from app.modules.banks.models import Transaction
 from app.modules.categorization.engine import (
@@ -184,13 +185,10 @@ async def test_api_seed_scan_categorizes_stub_items(client: AsyncClient) -> None
         },
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
-    scan = await client.post(
-        "/api/v1/receipts/scan",
-        headers=headers,
-        json={"fn": "dqapi1", "fd": "dqapi2", "fp": "dqapi3", "total_amount": "250.00"},
+    body = await confirm_grocery_receipt(
+        client, headers, fn="dqapi1", fd="dqapi2", fp="dqapi3", total="250.00"
     )
-    assert scan.status_code == 201, scan.text
-    items = scan.json()["items"]
+    items = body["items"]
     assert all(i.get("category_id") for i in items)
     assert all(i.get("product_variant_id") for i in items)
 
