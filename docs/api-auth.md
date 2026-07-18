@@ -9,13 +9,13 @@ Base prefix: `/api/v1`
 | POST | `/auth/register` | — | Create user + issue token pair |
 | POST | `/auth/login` | — | Login + issue token pair |
 | POST | `/auth/refresh` | — | Rotate refresh, new access |
-| POST | `/auth/logout` | optional Bearer | Revoke refresh for device |
+| POST | `/auth/logout` | **Bearer required** | Revoke refresh for device |
 | POST | `/auth/revoke-all` | Bearer | Revoke all refresh tokens |
 | GET | `/auth/me` | Bearer | Current user profile |
 | POST | `/auth/verify-email/request` | Bearer | Create verification token (email send later) |
 | POST | `/auth/verify-email/confirm` | — | Confirm email with token |
 | POST | `/auth/password-reset/request` | — | Issue reset token (no email enum) |
-| POST | `/auth/password-reset/confirm` | — | Set new password + revoke sessions |
+| POST | `/auth/password-reset/confirm` | — | Set new password + revoke sessions (one-time token) |
 
 ## Register / Login body
 
@@ -55,4 +55,6 @@ Base prefix: `/api/v1`
 - Refresh: opaque, stored as HMAC-SHA256 hash only, bound to `device_id`
 - Rotation on every refresh; reuse of old token revokes **all** sessions
 - Passwords: **Argon2id**
-- Email: `email_hash` for lookup + `email_enc` (Fernet) at rest
+- Email lookup: `normalize(lowercase)` → `SHA-256(pepper ‖ email)` → `email_hash` UNIQUE
+- Email at rest: `email_enc` via **AES-256-GCM** (`EncryptionService`)
+- Password reset / email verify tokens: `token_hash` + `expires_at` + `used_at` (one-time)

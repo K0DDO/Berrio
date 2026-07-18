@@ -7,7 +7,6 @@ from app.modules.auth.dependencies import (
     client_ip_hash,
     get_auth_service,
     get_current_user_id,
-    get_optional_user_id,
 )
 from app.modules.auth.schemas import (
     LoginRequest,
@@ -71,8 +70,9 @@ async def logout(
     body: LogoutRequest,
     request: Request,
     service: Annotated[AuthService, Depends(get_auth_service)],
-    user_id: Annotated[UUID | None, Depends(get_optional_user_id)],
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
 ) -> MessageResponse:
+    """Logout requires a valid Bearer access token."""
     return await service.logout(
         refresh_token=body.refresh_token,
         device_id=body.device_id,

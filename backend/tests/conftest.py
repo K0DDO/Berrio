@@ -41,6 +41,9 @@ async def client(db_engine) -> AsyncIterator[AsyncClient]:
             yield session
 
     get_settings.cache_clear()
+    from app.core.encryption import get_encryption_service
+
+    get_encryption_service.cache_clear()
     app = create_app()
     app.dependency_overrides[get_db_session] = override_get_db
 
@@ -50,6 +53,7 @@ async def client(db_engine) -> AsyncIterator[AsyncClient]:
 
     app.dependency_overrides.clear()
     get_settings.cache_clear()
+    get_encryption_service.cache_clear()
 
 
 @pytest.fixture

@@ -1,7 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
-from app.core.security import hash_password, verify_password
+from app.core.encryption import EncryptionService, get_encryption_service
+from app.core.security import decrypt_email, encrypt_email, hash_email, hash_password, verify_password
 
 
 def test_argon2id_hash_and_verify() -> None:
@@ -9,6 +10,27 @@ def test_argon2id_hash_and_verify() -> None:
     assert hashed.startswith("$argon2id$")
     assert verify_password("Secret123!", hashed)
     assert not verify_password("wrong", hashed)
+
+
+def test_aes_gcm_encryption_roundtrip() -> None:
+    get_encryption_service.cache_clear()
+    svc = EncryptionService.from_settings()
+    blob = svc.encrypt_str("user@berrio.app")
+    assert blob[0:1] == b"\x01"
+    assert svc.decrypt_str(blob) == "user@berrio.app"
+    # Different nonce each time
+    assert svc.encrypt_str("user@berrio.app") != blob
+
+
+def test_email_hash_normalized_unique_lookup() -> None:
+    assert hash_email("  User@Berrio.APP ") == hash_email("user@berrio.app")
+    assert hash_email("a@b.c") != hash_email("c@b.a")
+
+
+def test_encrypt_email_uses_aes_gcm() -> None:
+    get_encryption_service.cache_clear()
+    blob = encrypt_email("  Alice@Berrio.APP ")
+    assert decrypt_email(blob) == "alice@berrio.app"
 
 
 @pytest.mark.asyncio
@@ -223,6 +245,13 @@ async def test_password_reset_flow(client: AsyncClient, device_payload: dict) ->
     )
     assert confirmed.status_code == 200
 
+    # One-time: reuse rejected
+    reuse = await client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": token, "new_password": "AnotherSecret123!"},
+    )
+    assert reuse.status_code == 400
+
     bad_old = await client.post(
         "/api/v1/auth/login",
         json={"email": "reset@berrio.app", "password": "Secret123!", **device_payload},
@@ -234,6 +263,25 @@ async def test_password_reset_flow(client: AsyncClient, device_payload: dict) ->
         json={"email": "reset@berrio.app", "password": "NewSecret123!", **device_payload},
     )
     assert ok_new.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_logout_requires_bearer(client: AsyncClient, device_payload: dict) -> None:
+    reg = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "logout-bearer@berrio.app",
+            "password": "Secret123!",
+            "display_name": "L",
+            **device_payload,
+        },
+    )
+    refresh = reg.json()["refresh_token"]
+    no_auth = await client.post(
+        "/api/v1/auth/logout",
+        json={"refresh_token": refresh, "device_id": device_payload["device_id"]},
+    )
+    assert no_auth.status_code == 401
 
 
 @pytest.mark.asyncio

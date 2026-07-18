@@ -1,4 +1,4 @@
-"""Password hashing, JWT, refresh-token hashing."""
+"""Password hashing, JWT, refresh-token hashing, email lookup hash."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from argon2.exceptions import VerifyMismatchError
 from argon2.low_level import Type
 
 from app.core.config import get_settings
+from app.core.encryption import get_encryption_service
 
 # Argon2id — OWASP-aligned defaults for interactive logins
 _password_hasher = PasswordHasher(
@@ -47,40 +48,30 @@ def needs_rehash(password_hash: str) -> bool:
         return False
 
 
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
 def hash_email(email: str) -> str:
-    """Deterministic lookup key — never store raw email in hash column."""
+    """
+    Lookup key: normalize → SHA-256(pepper || email).
+
+    Pepper prevents offline rainbow-table attacks on stolen email_hash columns.
+    Raw email is never stored in email_hash.
+    """
     settings = get_settings()
-    normalized = email.strip().lower().encode("utf-8")
+    normalized = normalize_email(email).encode("utf-8")
     pepper = settings.email_hash_pepper.encode("utf-8")
     return hashlib.sha256(pepper + normalized).hexdigest()
 
 
 def encrypt_email(email: str) -> bytes:
-    """AES-GCM-like via HMAC-derived key + Fernet-compatible secretbox (Stage 2).
-
-    Uses URL-safe token derived from FIELD_ENCRYPTION_KEY / SECRET_KEY.
-    """
-    from cryptography.fernet import Fernet
-
-    f = Fernet(_fernet_key())
-    return f.encrypt(email.strip().lower().encode("utf-8"))
+    """Encrypt normalized email with AES-256-GCM."""
+    return get_encryption_service().encrypt_str(normalize_email(email))
 
 
 def decrypt_email(email_enc: bytes) -> str:
-    from cryptography.fernet import Fernet
-
-    f = Fernet(_fernet_key())
-    return f.decrypt(email_enc).decode("utf-8")
-
-
-def _fernet_key() -> bytes:
-    """Derive a stable 32-byte url-safe Fernet key from settings."""
-    import base64
-
-    settings = get_settings()
-    raw = (settings.field_encryption_key or settings.secret_key).encode("utf-8")
-    digest = hashlib.sha256(raw).digest()
-    return base64.urlsafe_b64encode(digest)
+    return get_encryption_service().decrypt_str(email_enc)
 
 
 def hash_token(raw_token: str) -> str:

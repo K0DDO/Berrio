@@ -122,7 +122,8 @@ UI → Domain → Drift (source of truth on device)
 
 - HTTPS in production
 - JWT + refresh tokens (Stage 2)
-- Field-level encryption for sensitive columns (Stage 2+)
+- Field-level encryption via `EncryptionService` (**AES-256-GCM**)
+- Email: `email_hash` (SHA-256 lookup) + `email_enc` (AES-GCM)
 - Secrets via env / secret manager
 - No receipt photos stored
 

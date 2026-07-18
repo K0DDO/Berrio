@@ -211,15 +211,20 @@ class AuthService:
         *,
         refresh_token: str,
         device_id: str,
-        user_id: UUID | None = None,
+        user_id: UUID,
         ip_hash: str | None = None,
     ) -> MessageResponse:
         stored = await self._repo.get_refresh_by_hash(hash_token(refresh_token))
-        if stored is not None and stored.device_id == device_id and stored.revoked_at is None:
+        if (
+            stored is not None
+            and stored.user_id == user_id
+            and stored.device_id == device_id
+            and stored.revoked_at is None
+        ):
             await self._repo.revoke_refresh(stored)
             await self._audit.record(
                 action="auth.logout",
-                actor_user_id=user_id or stored.user_id,
+                actor_user_id=user_id,
                 entity_type="refresh_token",
                 entity_id=stored.id,
                 ip_hash=ip_hash,

@@ -7,8 +7,8 @@ Logical schema. Auth tables implemented in Stage 2 (`0002_auth`).
 ```text
 users
   id UUID PK
-  email_enc BYTEA              -- Fernet ciphertext
-  email_hash VARCHAR UNIQUE    -- sha256(pepper + email)
+  email_enc BYTEA              -- AES-256-GCM ciphertext (EncryptionService)
+  email_hash VARCHAR UNIQUE    -- SHA-256(pepper ‖ lowercase email)
   password_hash VARCHAR        -- Argon2id
   display_name VARCHAR
   is_active BOOL
@@ -28,10 +28,10 @@ refresh_tokens
   replaced_by_id UUID NULL     -- rotation chain
   created_at TIMESTAMPTZ
 
-email_verification_tokens      -- architectural prep
+email_verification_tokens      -- architectural prep (one-time)
   id, user_id FK, token_hash UNIQUE, expires_at, used_at, created_at
 
-password_reset_tokens          -- architectural prep
+password_reset_tokens          -- one-time: token_hash + expires_at + used_at
   id, user_id FK, token_hash UNIQUE, expires_at, used_at, created_at
 
 audit_logs                     -- append-only
