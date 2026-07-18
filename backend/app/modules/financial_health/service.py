@@ -10,9 +10,12 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.modules.financial_health.models import FinancialScore
+from app.modules.receipts.models import Receipt, ReceiptStatus
 
 
 @dataclass(slots=True)
@@ -33,6 +36,9 @@ class FinancialHealthService:
         receipts: list | None = None,
         total_spend: Decimal | None = None,
     ) -> FinancialHealthResult:
+        if receipts is None and self._session is not None:
+            receipts, total_spend = await self._load_month_spend(user_id)
+
         positive: list[str] = []
         negative: list[str] = []
         score = 70
@@ -47,7 +53,9 @@ class FinancialHealthService:
             negative.append("мало данных для оценки")
             score -= 15
 
-        if spend == 0:
+        if receipt_count > 0 and spend == 0:
+            positive.append("чеки без суммы — проверьте данные")
+        elif spend == 0:
             positive.append("нет расходов за период")
             score += 5
         elif spend < Decimal("5000"):
@@ -57,7 +65,6 @@ class FinancialHealthService:
             negative.append("высокие расходы за период")
             score -= 15
 
-        # Diversification proxy: many receipts → slightly healthier tracking habit
         if receipt_count >= 3:
             positive.append("регулярно учитываются покупки")
             score += 5
@@ -78,3 +85,17 @@ class FinancialHealthService:
             await self._session.flush()
 
         return FinancialHealthResult(user_id=user_id, score=score, factors=factors)
+
+    async def _load_month_spend(self, user_id: UUID) -> tuple[list, Decimal]:
+        assert self._session is not None
+        result = await self._session.execute(
+            select(Receipt)
+            .options(selectinload(Receipt.items))
+            .where(Receipt.user_id == user_id, Receipt.status == ReceiptStatus.DONE)
+        )
+        receipts = list(result.scalars().all())
+        total = Decimal("0")
+        for receipt in receipts:
+            for item in receipt.items:
+                total += item.sum or Decimal("0")
+        return receipts, total

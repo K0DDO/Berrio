@@ -49,6 +49,19 @@ async def list_members(
     return await service.get_members(user_id, family_id)
 
 
+@router.get("/{family_id}/visible-user-ids", response_model=list[UUID])
+async def visible_user_ids(
+    family_id: UUID,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[UUID]:
+    """Data isolation helper: which user IDs the actor may see in this family."""
+    from app.modules.families.access import FamilyAccessService
+
+    access = FamilyAccessService(session)
+    return await access.visible_user_ids(user_id, family_id)
+
+
 @router.patch("/{family_id}/members/{member_id}/permissions", response_model=MemberOut)
 async def patch_permission(
     family_id: UUID,

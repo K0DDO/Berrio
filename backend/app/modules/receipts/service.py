@@ -11,6 +11,7 @@ from app.modules.audit.service import AuditService
 from app.modules.categorization.service import CategorizationService
 from app.modules.events import get_event_bus
 from app.modules.events.receipt_events import ReceiptCreatedEvent, ReceiptFetchedEvent
+from app.modules.products.service import ProductService
 from app.modules.receipts.models import Receipt, ReceiptItem, ReceiptStatus
 from app.modules.receipts.repository import ReceiptRepository
 from app.modules.receipts.schemas import ReceiptOut, ReceiptScanRequest
@@ -29,6 +30,7 @@ class ReceiptService:
         self._bus = get_event_bus()
         self._fns = fns_client or get_fns_client()
         self._categorization = CategorizationService(session)
+        self._products = ProductService(session)
 
     async def scan(self, user_id: UUID, data: ReceiptScanRequest) -> ReceiptOut:
         existing = await self._repo.find_by_fingerprint(
@@ -103,6 +105,14 @@ class ReceiptService:
             await self._categorization.apply_to_receipt_items(
                 list(receipt.items), user_id=user_id
             )
+            for item in receipt.items:
+                await self._products.resolve_for_receipt_item(
+                    item,
+                    user_id=user_id,
+                    store_name=receipt.store_name,
+                    purchased_at=receipt.purchased_at,
+                    category_id=item.category_id,
+                )
             await self._repo.save(receipt)
             await self._bus.publish(
                 ReceiptFetchedEvent(

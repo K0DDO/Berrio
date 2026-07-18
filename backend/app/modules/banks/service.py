@@ -30,6 +30,7 @@ class ParseEmailRequest(BaseModel):
     bank_code: str
     subject: str = ""
     body: str
+    connection_id: UUID | None = None
 
 
 class TransactionOut(BaseModel):
@@ -40,6 +41,7 @@ class TransactionOut(BaseModel):
     booked_at: datetime
     source: str
     external_id: str
+    bank_connection_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -68,8 +70,38 @@ class BankService:
     async def ingest_email(
         self, user_id: UUID, data: ParseEmailRequest
     ) -> list[Transaction]:
+        from datetime import UTC, datetime
+
         parser = get_parser(data.bank_code)
-        parsed = parser.parse(data.subject, data.body)
+        connection_id = data.connection_id
+        if connection_id is not None:
+            conn = await self._session.get(BankConnection, connection_id)
+            if conn is None or conn.user_id != user_id:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Connection not found")
+        else:
+            result = await self._session.execute(
+                select(BankConnection).where(
+                    BankConnection.user_id == user_id,
+                    BankConnection.bank_code == data.bank_code.lower(),
+                )
+            )
+            conn = result.scalars().first()
+            connection_id = conn.id if conn else None
+
+        try:
+            parsed = parser.parse(data.subject, data.body)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Parser failed: {exc}",
+            ) from exc
+
+        if not parsed:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No transactions recognized in email body",
+            )
+
         saved: list[Transaction] = []
         for tx in parsed:
             existing = await self._session.execute(
@@ -88,10 +120,17 @@ class BankService:
                 merchant_raw=tx.merchant_raw,
                 booked_at=tx.booked_at,
                 external_id=tx.external_id,
+                bank_connection_id=connection_id,
                 status="posted",
             )
             self._session.add(row)
             saved.append(row)
+
+        if connection_id is not None:
+            conn = await self._session.get(BankConnection, connection_id)
+            if conn is not None:
+                conn.last_synced_at = datetime.now(UTC)
+
         await self._session.flush()
         return saved
 
