@@ -17,6 +17,7 @@ from app.modules.goals.models import FinancialGoal
 from app.modules.notifications.models import Notification
 from app.modules.products.models import Product, ProductPriceHistory, ProductVariant
 from app.modules.receipts.models import Receipt, ReceiptItem
+from app.modules.reconciliation.models import ReconciliationMatch
 from app.modules.users.models import User
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "ProductVariant",
     "Receipt",
     "ReceiptItem",
+    "ReconciliationMatch",
     "RefreshToken",
     "Transaction",
     "User",

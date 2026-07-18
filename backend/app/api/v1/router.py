@@ -12,6 +12,7 @@ from app.modules.financial_health.router import router as health_router
 from app.modules.goals.router import router as goals_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.receipts.router import router as receipts_router
+from app.modules.reconciliation.router import router as reconciliation_router
 
 api_router = APIRouter()
 api_router.include_router(system.router, tags=["system"])
@@ -26,3 +27,4 @@ api_router.include_router(families_router)
 api_router.include_router(goals_router)
 api_router.include_router(budgets_router)
 api_router.include_router(notifications_router)
+api_router.include_router(reconciliation_router)

@@ -18,4 +18,4 @@ Closed before new finance features:
 | 3 | Real FNS client (replace stub) when credentials available | Blocked on keys |
 | 4 | IMAP bank ingestion (credentials) | Blocked on keys |
 | 5 | Family invites + richer RBAC UI | Later |
-| 6 | Receipt ↔ bank transaction reconciliation | Later |
+| 6 | Receipt ↔ bank transaction reconciliation | Done (this sprint) |
