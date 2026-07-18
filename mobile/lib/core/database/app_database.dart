@@ -21,7 +21,7 @@ class SyncQueueItems extends Table {
 }
 
 class LocalReceipts extends Table {
-  TextColumn get id => text()(); // server UUID or local temp
+  TextColumn get id => text()();
   TextColumn get fn => text()();
   TextColumn get fd => text()();
   TextColumn get fp => text()();
@@ -36,14 +36,39 @@ class LocalReceipts extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [SyncQueueItems, LocalReceipts])
+class LocalNotifications extends Table {
+  TextColumn get id => text()();
+  TextColumn get type => text()();
+  TextColumn get title => text()();
+  TextColumn get message => text()();
+  TextColumn get severity => text().withDefault(const Constant('INFO'))();
+  TextColumn get payloadJson => text().withDefault(const Constant('{}'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get readAt => dateTime().nullable()();
+  BoolColumn get synced => boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DriftDatabase(tables: [SyncQueueItems, LocalReceipts, LocalNotifications])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.createTable(localNotifications);
+          }
+        },
+      );
 }
 
 LazyDatabase _openConnection() {

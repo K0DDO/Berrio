@@ -10,7 +10,7 @@ from app.modules.events import get_event_bus
 from app.modules.events.goal_events import GoalProgressUpdatedEvent
 from app.modules.goals.models import FinancialGoal, GoalStatus
 from app.modules.goals.schemas import GoalCreate, GoalOut, GoalProgressUpdate, GoalUpdate
-from app.modules.notifications.service import NotificationService, NotificationType
+from app.modules.notifications.service import NotificationService
 
 
 def _progress_pct(current: Decimal, target: Decimal) -> float:
@@ -40,7 +40,7 @@ class GoalService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._audit = AuditService(session)
-        self._notifications = NotificationService()
+        self._notifications = NotificationService(session)
 
     async def create(self, user_id: UUID, body: GoalCreate) -> GoalOut:
         goal = FinancialGoal(
@@ -121,12 +121,17 @@ class GoalService:
                 },
             )
         )
-        await self._notifications.notify(
+        draft = self._notifications.rules.goal_progress(
             user_id=goal.user_id,
-            type=NotificationType.GOAL_PROGRESS,
-            title="Goal progress",
-            message=f"{goal.name}: {goal.current_amount}/{goal.target_amount} {goal.currency}",
+            family_id=goal.family_id,
+            goal_id=goal.id,
+            goal_name=goal.name,
+            current=goal.current_amount,
+            target=goal.target_amount,
+            currency=goal.currency,
         )
+        if draft is not None:
+            await self._notifications.create_and_dispatch(draft)
         await self._audit.record(
             action="goal.progress",
             actor_user_id=actor_id,

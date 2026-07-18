@@ -4,13 +4,17 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.fns_client import FnsClient, get_fns_client
 from app.modules.audit.service import AuditService
+from app.modules.budgets.models import Budget, BudgetStatus
+from app.modules.budgets.service import BudgetService
 from app.modules.categorization.service import CategorizationService
 from app.modules.events import get_event_bus
 from app.modules.events.receipt_events import ReceiptCreatedEvent, ReceiptFetchedEvent
+from app.modules.notifications.service import NotificationService
 from app.modules.products.service import ProductService
 from app.modules.receipts.models import Receipt, ReceiptItem, ReceiptStatus
 from app.modules.receipts.repository import ReceiptRepository
@@ -31,6 +35,7 @@ class ReceiptService:
         self._fns = fns_client or get_fns_client()
         self._categorization = CategorizationService(session)
         self._products = ProductService(session)
+        self._notifications = NotificationService(session)
 
     async def scan(self, user_id: UUID, data: ReceiptScanRequest) -> ReceiptOut:
         existing = await self._repo.find_by_fingerprint(
@@ -127,6 +132,8 @@ class ReceiptService:
                 entity_id=receipt.id,
                 metadata={"store": data.store_name, "items": len(data.items)},
             )
+            await self._maybe_unusual_spending(receipt, user_id)
+            await self._check_active_budgets(user_id)
             await self._session.commit()
         except Exception as exc:  # noqa: BLE001 — convert to failed status
             receipt.status = ReceiptStatus.FAILED
@@ -140,6 +147,41 @@ class ReceiptService:
         refreshed = await self._repo.get_by_id(receipt_id, user_id)
         assert refreshed is not None
         return self._to_out(refreshed)
+
+    async def _maybe_unusual_spending(self, receipt: Receipt, user_id: UUID) -> None:
+        if receipt.total_amount is None:
+            return
+        result = await self._session.execute(
+            select(func.avg(Receipt.total_amount)).where(
+                Receipt.user_id == user_id,
+                Receipt.id != receipt.id,
+                Receipt.total_amount.is_not(None),
+                Receipt.status == ReceiptStatus.DONE,
+            )
+        )
+        avg = result.scalar_one_or_none()
+        if avg is None:
+            return
+        draft = self._notifications.rules.unusual_spending(
+            user_id=user_id,
+            receipt_id=receipt.id,
+            amount=receipt.total_amount,
+            average=Decimal(str(avg)),
+            store_name=receipt.store_name,
+        )
+        if draft is not None:
+            await self._notifications.create_and_dispatch(draft)
+
+    async def _check_active_budgets(self, user_id: UUID) -> None:
+        result = await self._session.execute(
+            select(Budget.id).where(
+                Budget.user_id == user_id,
+                Budget.status == BudgetStatus.ACTIVE,
+            )
+        )
+        budget_service = BudgetService(self._session)
+        for (budget_id,) in result.all():
+            await budget_service.check_thresholds([user_id], budget_id)
 
     async def get(self, user_id: UUID, receipt_id: UUID, *, scope_user_ids: list[UUID] | None = None) -> ReceiptOut:
         ids = scope_user_ids or [user_id]

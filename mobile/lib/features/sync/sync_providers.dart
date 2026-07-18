@@ -4,16 +4,20 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/database/app_database.dart';
+import '../../core/database/database_providers.dart';
 import '../../core/network/dio_client.dart';
+import '../notifications/data/notifications_api.dart';
 import '../receipts/data/local_receipts_dao.dart';
 import '../receipts/data/receipts_api.dart';
 import 'data/drift_sync_queue.dart';
 import 'domain/sync_job.dart';
 import 'domain/sync_queue_repository.dart';
 
+export '../../core/database/database_providers.dart' show appDatabaseProvider;
+
 abstract class SyncEngine {
   Future<void> enqueueReceiptScan(Map<String, dynamic> qrPayload);
+  Future<void> enqueueNotificationRead(String notificationId);
   Future<int> drainPending();
   Future<void> syncWhenOnline();
 }
@@ -25,12 +29,14 @@ class ReceiptSyncEngine implements SyncEngine {
     this._queue,
     this._localReceipts,
     this._receiptsApi,
+    this._notificationsApi,
     this._connectivity,
   );
 
   final SyncQueueRepository _queue;
   final LocalReceiptsDao _localReceipts;
   final ReceiptsApi _receiptsApi;
+  final NotificationsApi _notificationsApi;
   final Connectivity _connectivity;
 
   @override
@@ -54,6 +60,15 @@ class ReceiptSyncEngine implements SyncEngine {
   }
 
   @override
+  Future<void> enqueueNotificationRead(String notificationId) async {
+    await _queue.enqueue(
+      type: 'NOTIFICATION_READ',
+      payloadJson: jsonEncode({'id': notificationId}),
+      idempotencyKey: 'notif_read_$notificationId',
+    );
+  }
+
+  @override
   Future<int> drainPending() async {
     final pending = await _queue.pending();
     var done = 0;
@@ -72,6 +87,9 @@ class ReceiptSyncEngine implements SyncEngine {
             storeName: receipt.storeName,
             totalAmount: receipt.totalAmount,
           );
+        } else if (job.type == 'NOTIFICATION_READ') {
+          final payload = jsonDecode(job.payloadJson) as Map<String, dynamic>;
+          await _notificationsApi.markRead(payload['id'] as String);
         }
         await _queue.markStatus(job.id, SyncJobStatus.done);
         done++;
@@ -104,12 +122,6 @@ class ReceiptSyncEngine implements SyncEngine {
   }
 }
 
-final appDatabaseProvider = Provider<AppDatabase>((ref) {
-  final db = AppDatabase();
-  ref.onDispose(db.close);
-  return db;
-});
-
 final syncQueueRepositoryProvider = Provider<SyncQueueRepository>((ref) {
   return DriftSyncQueueRepository(ref.watch(appDatabaseProvider));
 });
@@ -127,6 +139,7 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
     ref.watch(syncQueueRepositoryProvider),
     ref.watch(localReceiptsDaoProvider),
     ref.watch(receiptsApiProvider),
+    ref.watch(notificationsApiProvider),
     Connectivity(),
   );
 });

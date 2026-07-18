@@ -14,6 +14,7 @@ from app.modules.categories.models import Category, CategoryRule
 from app.modules.families.models import Family, FamilyMember, FamilyPermission
 from app.modules.financial_health.models import FinancialScore
 from app.modules.goals.models import FinancialGoal
+from app.modules.notifications.models import Notification
 from app.modules.products.models import Product, ProductPriceHistory, ProductVariant
 from app.modules.receipts.models import Receipt, ReceiptItem
 from app.modules.users.models import User
@@ -32,6 +33,7 @@ __all__ = [
     "FamilyPermission",
     "FinancialGoal",
     "FinancialScore",
+    "Notification",
     "PasswordResetToken",
     "Product",
     "ProductPriceHistory",

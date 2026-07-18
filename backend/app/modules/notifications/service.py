@@ -1,49 +1,128 @@
 """
-Notifications — in-app, push, email channels.
+NotificationService — persist explainable alerts and fan-out to channels.
 
-Types: PRICE_CHANGE, BUDGET_WARNING, AI_INSIGHT, GOAL_PROGRESS, SYSTEM.
+Pipeline:
+  Domain Event / domain signal
+        ↓
+  Notification Rules Engine
+        ↓
+  Notification (persisted)
+        ↓
+  Channels (InApp MVP; Push/Email interfaces ready)
 """
 
-from enum import StrEnum
-from typing import Protocol
+from __future__ import annotations
+
+from datetime import UTC, datetime
 from uuid import UUID
 
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-class NotificationType(StrEnum):
-    PRICE_CHANGE = "PRICE_CHANGE"
-    BUDGET_WARNING = "BUDGET_WARNING"
-    AI_INSIGHT = "AI_INSIGHT"
-    GOAL_PROGRESS = "GOAL_PROGRESS"
-    SYSTEM = "SYSTEM"
-
-
-class NotificationChannel(Protocol):
-    async def send(
-        self,
-        *,
-        user_id: UUID,
-        type: NotificationType,
-        title: str,
-        message: str,
-    ) -> None: ...
+from app.modules.notifications.channels import InAppChannel, NotificationChannel
+from app.modules.notifications.models import Notification
+from app.modules.notifications.rules import NotificationRulesEngine
+from app.modules.notifications.schemas import NotificationCreate, NotificationOut
 
 
 class NotificationService:
-    """Fan-out stub — channels registered in later stages."""
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        channels: list[NotificationChannel] | None = None,
+        rules: NotificationRulesEngine | None = None,
+    ) -> None:
+        self._session = session
+        self._rules = rules or NotificationRulesEngine()
+        self._channels: list[NotificationChannel] = list(channels) if channels else [InAppChannel()]
 
-    def __init__(self) -> None:
-        self._channels: list[NotificationChannel] = []
+    @property
+    def rules(self) -> NotificationRulesEngine:
+        return self._rules
 
     def register_channel(self, channel: NotificationChannel) -> None:
         self._channels.append(channel)
 
+    async def create_and_dispatch(self, draft: NotificationCreate) -> NotificationOut:
+        row = Notification(
+            user_id=draft.user_id,
+            family_id=draft.family_id,
+            type=draft.type.value,
+            title=draft.title,
+            message=draft.message,
+            severity=draft.severity.value,
+            payload=draft.payload,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        for channel in self._channels:
+            await channel.send(row)
+        return NotificationOut.model_validate(row)
+
+    async def dispatch_many(self, drafts: list[NotificationCreate]) -> list[NotificationOut]:
+        return [await self.create_and_dispatch(d) for d in drafts]
+
+    async def list_for_user(
+        self,
+        user_id: UUID,
+        *,
+        unread_only: bool = False,
+        limit: int = 50,
+    ) -> list[NotificationOut]:
+        stmt = (
+            select(Notification)
+            .where(Notification.user_id == user_id)
+            .order_by(Notification.created_at.desc())
+            .limit(limit)
+        )
+        if unread_only:
+            stmt = stmt.where(Notification.read_at.is_(None))
+        result = await self._session.execute(stmt)
+        return [NotificationOut.model_validate(r) for r in result.scalars().all()]
+
+    async def mark_read(self, user_id: UUID, notification_id: UUID) -> NotificationOut:
+        result = await self._session.execute(
+            select(Notification).where(
+                Notification.id == notification_id,
+                Notification.user_id == user_id,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Notification not found")
+        if row.read_at is None:
+            row.read_at = datetime.now(UTC)
+            await self._session.flush()
+        return NotificationOut.model_validate(row)
+
+    # ---- Legacy shim used by older call sites (budgets/goals before rules) ----
     async def notify(
         self,
         *,
         user_id: UUID,
-        type: NotificationType,
+        type,  # NotificationType
         title: str,
         message: str,
-    ) -> None:
-        for channel in self._channels:
-            await channel.send(user_id=user_id, type=type, title=title, message=message)
+        family_id: UUID | None = None,
+        severity=None,
+        payload: dict | None = None,
+    ) -> NotificationOut:
+        from app.modules.notifications.models import NotificationSeverity, NotificationType
+
+        ntype = type if isinstance(type, NotificationType) else NotificationType(str(type))
+        sev = severity or NotificationSeverity.INFO
+        if isinstance(sev, str):
+            sev = NotificationSeverity(sev)
+        return await self.create_and_dispatch(
+            NotificationCreate(
+                user_id=user_id,
+                family_id=family_id,
+                type=ntype,
+                title=title,
+                message=message,
+                severity=sev,
+                payload=payload or {},
+            )
+        )

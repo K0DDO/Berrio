@@ -11,7 +11,7 @@ from app.modules.budgets.models import Budget, BudgetStatus
 from app.modules.budgets.schemas import BudgetCreate, BudgetOut, BudgetUpdate
 from app.modules.events import get_event_bus
 from app.modules.events.budget_events import BudgetThresholdExceededEvent
-from app.modules.notifications.service import NotificationService, NotificationType
+from app.modules.notifications.service import NotificationService
 from app.modules.receipts.models import Receipt
 
 
@@ -23,7 +23,7 @@ class BudgetService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._audit = AuditService(session)
-        self._notifications = NotificationService()
+        self._notifications = NotificationService(session)
 
     async def create(self, user_id: UUID, body: BudgetCreate) -> BudgetOut:
         budget = Budget(
@@ -96,27 +96,31 @@ class BudgetService:
         return await self._to_out(budget, user_ids)
 
     async def check_thresholds(self, user_ids: list[UUID], budget_id: UUID) -> BudgetOut:
-        """Recompute spend and emit warning when over limit."""
+        """Recompute spend and emit explainable budget alerts (80% / 100%)."""
         budget = await self._get(user_ids, budget_id)
         out = await self._to_out(budget, user_ids)
-        if out.over_budget:
-            bus = get_event_bus()
-            await bus.publish(
-                BudgetThresholdExceededEvent(
-                    actor_user_id=budget.user_id,
-                    payload={
-                        "budget_id": str(budget.id),
-                        "spent": str(out.spent_amount),
-                        "limit": str(out.limit_amount),
-                    },
+        drafts = self._notifications.rules.budget_monitoring(
+            user_id=budget.user_id,
+            family_id=budget.family_id,
+            budget_id=budget.id,
+            budget_name=budget.name,
+            spent=out.spent_amount,
+            limit_amount=out.limit_amount,
+            currency=budget.currency,
+        )
+        if drafts:
+            await self._notifications.dispatch_many(drafts)
+            if out.over_budget:
+                await get_event_bus().publish(
+                    BudgetThresholdExceededEvent(
+                        actor_user_id=budget.user_id,
+                        payload={
+                            "budget_id": str(budget.id),
+                            "spent": str(out.spent_amount),
+                            "limit": str(out.limit_amount),
+                        },
+                    )
                 )
-            )
-            await self._notifications.notify(
-                user_id=budget.user_id,
-                type=NotificationType.BUDGET_WARNING,
-                title="Budget exceeded",
-                message=f"{budget.name}: spent {out.spent_amount} of {out.limit_amount}",
-            )
         return out
 
     async def _spent_amount(self, budget: Budget, scope_user_ids: list[UUID]) -> Decimal:

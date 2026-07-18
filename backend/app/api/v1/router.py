@@ -10,6 +10,7 @@ from app.modules.categories.router import router as categories_router
 from app.modules.families.router import router as families_router
 from app.modules.financial_health.router import router as health_router
 from app.modules.goals.router import router as goals_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.receipts.router import router as receipts_router
 
 api_router = APIRouter()
@@ -24,3 +25,4 @@ api_router.include_router(banks_router)
 api_router.include_router(families_router)
 api_router.include_router(goals_router)
 api_router.include_router(budgets_router)
+api_router.include_router(notifications_router)

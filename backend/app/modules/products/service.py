@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.notifications.service import NotificationService
 from app.modules.products.models import Product, ProductPriceHistory, ProductVariant
 from app.modules.receipts.models import ReceiptItem
 
@@ -22,6 +23,7 @@ _VOLUME_RE = re.compile(
 class ProductService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._notifications = NotificationService(session)
 
     async def resolve_for_receipt_item(
         self,
@@ -37,6 +39,20 @@ class ProductService:
         variant = await self._find_or_create_variant(product.id, weight, volume, unit)
         item.product_variant_id = variant.id
 
+        previous = await self._last_price(variant.id, user_id=user_id)
+        if previous is not None and item.price is not None:
+            display = f"{brand} {product.name}".strip() if brand else product.name
+            draft = self._notifications.rules.price_change(
+                user_id=user_id,
+                product_name=display,
+                variant_id=variant.id,
+                old_price=previous,
+                new_price=item.price,
+                store_name=store_name,
+            )
+            if draft is not None:
+                await self._notifications.create_and_dispatch(draft)
+
         self._session.add(
             ProductPriceHistory(
                 product_variant_id=variant.id,
@@ -51,6 +67,20 @@ class ProductService:
         )
         await self._session.flush()
         return variant
+
+    async def _last_price(self, variant_id: UUID, *, user_id: UUID) -> Decimal | None:
+        result = await self._session.execute(
+            select(ProductPriceHistory.price)
+            .where(
+                ProductPriceHistory.product_variant_id == variant_id,
+                ProductPriceHistory.user_id == user_id,
+                ProductPriceHistory.price.is_not(None),
+            )
+            .order_by(ProductPriceHistory.purchased_at.desc())
+            .limit(1)
+        )
+        value = result.scalar_one_or_none()
+        return Decimal(str(value)) if value is not None else None
 
     async def _find_or_create_product(
         self, brand: str | None, name: str, category_id: UUID | None
