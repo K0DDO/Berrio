@@ -1,4 +1,48 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/network/dio_client.dart';
+
+class ReceiptItemDto {
+  ReceiptItemDto({
+    required this.id,
+    required this.nameRaw,
+    required this.qty,
+    required this.price,
+    required this.sum,
+    this.categoryId,
+    this.categoryName,
+    this.productVariantId,
+    this.priceChangePct,
+    this.previousPrice,
+  });
+
+  final String id;
+  final String nameRaw;
+  final String qty;
+  final String price;
+  final String sum;
+  final String? categoryId;
+  final String? categoryName;
+  final String? productVariantId;
+  final double? priceChangePct;
+  final String? previousPrice;
+
+  factory ReceiptItemDto.fromJson(Map<String, dynamic> json) {
+    return ReceiptItemDto(
+      id: json['id'] as String,
+      nameRaw: json['name_raw'] as String? ?? '',
+      qty: json['qty']?.toString() ?? '1',
+      price: json['price']?.toString() ?? '0',
+      sum: json['sum']?.toString() ?? '0',
+      categoryId: json['category_id']?.toString(),
+      categoryName: json['category_name'] as String?,
+      productVariantId: json['product_variant_id']?.toString(),
+      priceChangePct: (json['price_change_pct'] as num?)?.toDouble(),
+      previousPrice: json['previous_price']?.toString(),
+    );
+  }
+}
 
 class ReceiptDto {
   ReceiptDto({
@@ -9,6 +53,8 @@ class ReceiptDto {
     required this.status,
     this.storeName,
     this.totalAmount,
+    this.purchasedAt,
+    this.errorMessage,
     this.items = const [],
   });
 
@@ -19,7 +65,9 @@ class ReceiptDto {
   final String status;
   final String? storeName;
   final String? totalAmount;
-  final List<Map<String, dynamic>> items;
+  final DateTime? purchasedAt;
+  final String? errorMessage;
+  final List<ReceiptItemDto> items;
 
   factory ReceiptDto.fromJson(Map<String, dynamic> json) {
     return ReceiptDto(
@@ -30,8 +78,12 @@ class ReceiptDto {
       status: json['status'] as String,
       storeName: json['store_name'] as String?,
       totalAmount: json['total_amount']?.toString(),
+      purchasedAt: json['purchased_at'] != null
+          ? DateTime.tryParse(json['purchased_at'] as String)
+          : null,
+      errorMessage: json['error_message'] as String?,
       items: (json['items'] as List<dynamic>? ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
+          .map((e) => ReceiptItemDto.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
     );
   }
@@ -65,4 +117,22 @@ class ReceiptsApi {
         .map((e) => ReceiptDto.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
+
+  Future<ReceiptDto> getById(String id) async {
+    final response = await _dio.get<Map<String, dynamic>>('/receipts/$id');
+    return ReceiptDto.fromJson(response.data!);
+  }
 }
+
+final receiptsApiProvider = Provider<ReceiptsApi>((ref) {
+  return ReceiptsApi(ref.watch(dioProvider));
+});
+
+final receiptsListProvider = FutureProvider.autoDispose<List<ReceiptDto>>((ref) {
+  return ref.watch(receiptsApiProvider).list();
+});
+
+final receiptDetailProvider =
+    FutureProvider.autoDispose.family<ReceiptDto, String>((ref, id) {
+  return ref.watch(receiptsApiProvider).getById(id);
+});

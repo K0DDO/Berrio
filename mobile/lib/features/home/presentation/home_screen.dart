@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/refresh.dart';
+import '../../../shared/widgets/journey_state_panel.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/dashboard_api.dart';
 
@@ -34,7 +36,7 @@ class HomeScreen extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            onPressed: () => ref.invalidate(dashboardProvider),
+            onPressed: () => refreshMoneySurfaces(ref),
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
@@ -45,15 +47,14 @@ class HomeScreen extends ConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Could not load dashboard.\n$e', textAlign: TextAlign.center),
-          ),
+        error: (e, _) => JourneyStatePanel.error(
+          message: '$e',
+          onRetry: () => refreshMoneySurfaces(ref),
         ),
         data: (dash) => RefreshIndicator(
-          onRefresh: () async => ref.invalidate(dashboardProvider),
+          onRefresh: () async => refreshMoneySurfaces(ref),
           child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
               _ScoreCard(score: dash.score),
@@ -75,11 +76,24 @@ class HomeScreen extends ConsumerWidget {
               if (dash.aiTitle != null) ...[
                 const SizedBox(height: 12),
                 _AiCard(title: dash.aiTitle!, body: dash.aiBody ?? ''),
+              ] else ...[
+                const SizedBox(height: 12),
+                const _AiCard(
+                  title: 'Начните со скана чека',
+                  body:
+                      'Отсканируйте QR — появится первый разбор трат и рекомендации.',
+                ),
               ],
               if (dash.notifications.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _NotesCard(notes: dash.notifications),
               ],
+              const SizedBox(height: 16),
+              FilledButton.tonalIcon(
+                onPressed: () => context.go('/scan'),
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Scan a receipt'),
+              ),
             ],
           ),
         ),

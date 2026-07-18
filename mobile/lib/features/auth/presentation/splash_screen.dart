@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/router.dart';
+import '../../../core/storage/secure_token_store.dart';
 import 'auth_controller.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -14,7 +16,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(authControllerProvider.notifier).bootstrap());
+    Future.microtask(_bootstrap);
+  }
+
+  Future<void> _bootstrap() async {
+    final seen = await ref.read(secureTokenStoreProvider).hasSeenOnboarding();
+    ref.read(onboardingSeenProvider.notifier).state = seen;
+    await ref.read(authControllerProvider.notifier).bootstrap();
   }
 
   @override

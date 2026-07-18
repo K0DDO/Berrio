@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/refresh.dart';
+import '../../../shared/widgets/journey_state_panel.dart';
 import '../data/budgets_api.dart';
 
 class BudgetsScreen extends ConsumerWidget {
@@ -18,10 +20,18 @@ class BudgetsScreen extends ConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Failed: $e')),
+        error: (e, _) => JourneyStatePanel.error(
+          message: '$e',
+          onRetry: () => ref.invalidate(budgetsListProvider),
+        ),
         data: (budgets) {
           if (budgets.isEmpty) {
-            return const Center(child: Text('No budgets yet. Set a monthly limit.'));
+            return JourneyStatePanel.empty(
+              title: 'No budgets yet',
+              message: 'Set a monthly limit — overspend alerts appear on the dashboard.',
+              actionLabel: 'Add budget',
+              onAction: () => _showCreateDialog(context, ref),
+            );
           }
           return ListView.separated(
             itemCount: budgets.length,
@@ -97,6 +107,6 @@ class BudgetsScreen extends ConsumerWidget {
           periodStart: fmt(start),
           periodEnd: fmt(end),
         );
-    ref.invalidate(budgetsListProvider);
+    refreshMoneySurfaces(ref);
   }
 }

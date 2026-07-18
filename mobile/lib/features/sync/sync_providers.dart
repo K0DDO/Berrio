@@ -5,7 +5,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database_providers.dart';
-import '../../core/network/dio_client.dart';
 import '../notifications/data/notifications_api.dart';
 import '../receipts/data/local_receipts_dao.dart';
 import '../receipts/data/receipts_api.dart';
@@ -128,10 +127,6 @@ final syncQueueRepositoryProvider = Provider<SyncQueueRepository>((ref) {
 
 final localReceiptsDaoProvider = Provider<LocalReceiptsDao>((ref) {
   return LocalReceiptsDao(ref.watch(appDatabaseProvider));
-});
-
-final receiptsApiProvider = Provider<ReceiptsApi>((ref) {
-  return ReceiptsApi(ref.watch(dioProvider));
 });
 
 final syncEngineProvider = Provider<SyncEngine>((ref) {

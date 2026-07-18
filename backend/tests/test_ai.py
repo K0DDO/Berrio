@@ -32,4 +32,10 @@ async def test_ai_chat_and_insights(client: AsyncClient) -> None:
 
     insights = await client.get("/api/v1/ai/insights", headers=headers)
     assert insights.status_code == 200
-    assert len(insights.json()) >= 1
+    payload = insights.json()
+    assert len(payload) >= 1
+    kinds = {i["kind"] for i in payload}
+    assert "first_insight" in kinds or "onboarding" in kinds or "spend_focus" in kinds
+    first = next((i for i in payload if i["kind"] == "first_insight"), None)
+    if first:
+        assert "расходы" in first["body"].lower() or "₽" in first["body"]

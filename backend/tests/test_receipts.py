@@ -40,6 +40,34 @@ async def test_scan_receipt_creates_items(client: AsyncClient) -> None:
     assert body["store_name"] == "Пятёрочка"
     assert len(body["items"]) == 2
     assert Decimal(str(body["total_amount"])) == Decimal("250.00")
+    assert any(i.get("category_name") for i in body["items"])
+
+
+@pytest.mark.asyncio
+async def test_receipt_price_change_on_second_scan(client: AsyncClient) -> None:
+    tokens = await _register(client, email="price@berrio.app")
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    first = await client.post(
+        "/api/v1/receipts/scan",
+        headers=headers,
+        json={"fn": "p1", "fd": "p2", "fp": "p3", "total_amount": "250.00"},
+    )
+    assert first.status_code == 201, first.text
+
+    second = await client.post(
+        "/api/v1/receipts/scan",
+        headers=headers,
+        json={"fn": "p4", "fd": "p5", "fp": "p6", "total_amount": "250.00"},
+    )
+    assert second.status_code == 201, second.text
+    # Same stub items → previous price appears when variant history has 2 rows
+    items = second.json()["items"]
+    assert items
+    # At least schema fields present
+    assert "previous_price" in items[0]
+    assert "price_change_pct" in items[0]
+    assert "category_name" in items[0]
 
 
 @pytest.mark.asyncio

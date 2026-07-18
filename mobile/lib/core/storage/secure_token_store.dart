@@ -12,9 +12,19 @@ class SecureTokenStore {
 
   static const _refreshKey = 'berrio_refresh_token';
   static const _deviceKey = 'berrio_device_id';
+  static const _onboardingKey = 'berrio_onboarding_seen';
   String? _accessToken;
 
   String? get accessToken => _accessToken;
+
+  Future<bool> hasSeenOnboarding() async {
+    final v = await _storage.read(key: _onboardingKey);
+    return v == '1';
+  }
+
+  Future<void> markOnboardingSeen() async {
+    await _storage.write(key: _onboardingKey, value: '1');
+  }
 
   Future<void> saveSession({
     required String accessToken,

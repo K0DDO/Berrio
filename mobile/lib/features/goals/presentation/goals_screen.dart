@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/refresh.dart';
+import '../../../shared/widgets/journey_state_panel.dart';
 import '../data/goals_api.dart';
 
 class GoalsScreen extends ConsumerWidget {
@@ -17,10 +19,18 @@ class GoalsScreen extends ConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Failed: $e')),
+        error: (e, _) => JourneyStatePanel.error(
+          message: '$e',
+          onRetry: () => ref.invalidate(goalsListProvider),
+        ),
         data: (goals) {
           if (goals.isEmpty) {
-            return const Center(child: Text('No goals yet. Add your first target.'));
+            return JourneyStatePanel.empty(
+              title: 'No goals yet',
+              message: 'Add a savings target — progress will show on the dashboard.',
+              actionLabel: 'Add goal',
+              onAction: () => _showCreateDialog(context, ref),
+            );
           }
           return ListView.separated(
             itemCount: goals.length,
@@ -79,7 +89,7 @@ class GoalsScreen extends ConsumerWidget {
           name: nameCtrl.text.trim(),
           targetAmount: targetCtrl.text.trim(),
         );
-    ref.invalidate(goalsListProvider);
+    refreshMoneySurfaces(ref);
   }
 
   Future<void> _showProgressDialog(
@@ -105,6 +115,6 @@ class GoalsScreen extends ConsumerWidget {
     );
     if (ok != true) return;
     await ref.read(goalsApiProvider).updateProgress(goal.id, ctrl.text.trim());
-    ref.invalidate(goalsListProvider);
+    refreshMoneySurfaces(ref);
   }
 }

@@ -23,7 +23,10 @@ class ReceiptItemOut(BaseModel):
     price: Decimal
     sum: Decimal
     category_id: UUID | None = None
+    category_name: str | None = None
     product_variant_id: UUID | None = None
+    previous_price: Decimal | None = None
+    price_change_pct: float | None = None
 
     model_config = {"from_attributes": True}
 

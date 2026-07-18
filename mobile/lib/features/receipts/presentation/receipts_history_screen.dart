@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
+import '../../../shared/widgets/journey_state_panel.dart';
 import '../../sync/sync_providers.dart';
 import '../data/local_receipts_dao.dart';
 import '../data/receipts_api.dart';
@@ -11,22 +13,13 @@ final localReceiptsProvider =
   return ref.watch(localReceiptsDaoProvider).listAll();
 });
 
-final remoteReceiptsProvider =
-    FutureProvider.autoDispose<List<ReceiptDto>>((ref) async {
-  try {
-    return await ref.watch(receiptsApiProvider).list();
-  } catch (_) {
-    return const [];
-  }
-});
-
 class ReceiptsHistoryScreen extends ConsumerWidget {
   const ReceiptsHistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final localAsync = ref.watch(localReceiptsProvider);
-    final remoteAsync = ref.watch(remoteReceiptsProvider);
+    final remoteAsync = ref.watch(receiptsListProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -36,16 +29,9 @@ class ReceiptsHistoryScreen extends ConsumerWidget {
             onPressed: () async {
               await ref.read(syncEngineProvider).syncWhenOnline();
               ref.invalidate(localReceiptsProvider);
-              ref.invalidate(remoteReceiptsProvider);
+              ref.invalidate(receiptsListProvider);
             },
             icon: const Icon(Icons.sync),
-          ),
-          IconButton(
-            onPressed: () {
-              ref.invalidate(localReceiptsProvider);
-              ref.invalidate(remoteReceiptsProvider);
-            },
-            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
@@ -55,14 +41,20 @@ class ReceiptsHistoryScreen extends ConsumerWidget {
       ),
       body: localAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Local DB error: $e')),
+        error: (e, _) => JourneyStatePanel.error(
+          message: '$e',
+          onRetry: () => ref.invalidate(localReceiptsProvider),
+        ),
         data: (local) {
           final remote = remoteAsync.valueOrNull ?? const <ReceiptDto>[];
           if (local.isEmpty && remote.isEmpty) {
-            return const Center(child: Text('No receipts yet. Scan a QR.'));
+            return JourneyStatePanel.empty(
+              title: 'No receipts yet',
+              message: 'Scan a fiscal QR in the store — Berrio will do the rest.',
+              actionLabel: 'Scan receipt',
+              onAction: () => context.go('/scan'),
+            );
           }
-
-          // Prefer local (includes offline) and supplement with remote-only.
           final byKey = <String, _HistoryItem>{};
           for (final r in remote) {
             byKey['${r.fn}|${r.fd}|${r.fp}'] = _HistoryItem.fromRemote(r);
@@ -81,11 +73,11 @@ class ReceiptsHistoryScreen extends ConsumerWidget {
               return ListTile(
                 title: Text(item.title),
                 subtitle: Text(
-                  '${item.fn} / ${item.fd} / ${item.fp}\n'
-                  'Status: ${item.status}${item.synced ? '' : ' (offline)'}',
+                  '${item.status}${item.synced ? '' : ' · offline'}'
+                  '${item.total != null ? '\n${item.total} RUB' : ''}',
                 ),
-                isThreeLine: true,
-                trailing: Text(item.total ?? ''),
+                isThreeLine: item.total != null,
+                trailing: const Icon(Icons.chevron_right),
                 onTap: item.serverId == null
                     ? null
                     : () => context.push('/receipts/${item.serverId}'),
@@ -130,7 +122,7 @@ class _HistoryItem {
         fp: r.fp,
         status: r.status,
         synced: true,
-        sortAt: DateTime.now(),
+        sortAt: r.purchasedAt ?? DateTime.now(),
         total: r.totalAmount,
         serverId: r.id,
       );
@@ -146,52 +138,85 @@ class _HistoryItem {
   final String? serverId;
 }
 
-class ReceiptDetailScreen extends ConsumerWidget {
-  const ReceiptDetailScreen({super.key, required this.receiptId});
+class ReceiptDetailsScreen extends ConsumerWidget {
+  const ReceiptDetailsScreen({super.key, required this.receiptId});
 
   final String receiptId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<ReceiptDto?>(
-      future: ref.read(receiptsApiProvider).list().then(
-            (list) {
-              for (final r in list) {
-                if (r.id == receiptId) return r;
-              }
-              return null;
-            },
-          ),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final r = snapshot.data;
-        if (r == null) {
-          return const Scaffold(body: Center(child: Text('Not found')));
-        }
-        return Scaffold(
-          appBar: AppBar(title: Text(r.storeName ?? 'Receipt')),
-          body: ListView(
-            padding: const EdgeInsets.all(16),
+    final async = ref.watch(receiptDetailProvider(receiptId));
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Receipt')),
+      body: async.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => JourneyStatePanel.error(
+          message: '$e',
+          onRetry: () => ref.invalidate(receiptDetailProvider(receiptId)),
+        ),
+        data: (r) {
+          final date = r.purchasedAt != null
+              ? DateFormat('d MMM yyyy, HH:mm').format(r.purchasedAt!.toLocal())
+              : '—';
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              Text('Status: ${r.status}'),
-              Text('Total: ${r.totalAmount ?? '-'}'),
-              Text('FN/FD/FP: ${r.fn} / ${r.fd} / ${r.fp}'),
-              const SizedBox(height: 16),
-              Text('Items', style: Theme.of(context).textTheme.titleMedium),
-              ...r.items.map(
-                (i) => ListTile(
-                  title: Text('${i['name_raw']}'),
-                  trailing: Text('${i['sum']}'),
-                ),
+              Text(
+                r.storeName ?? 'Store',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
+              const SizedBox(height: 4),
+              Text(date, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 4),
+              Text(
+                '${r.totalAmount ?? '—'} RUB',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Status: ${r.status}',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Items',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              ...r.items.map((i) {
+                final priceNote = i.priceChangePct == null
+                    ? null
+                    : '${i.priceChangePct! > 0 ? '+' : ''}${i.priceChangePct!.toStringAsFixed(0)}%'
+                        '${i.previousPrice != null ? ' vs ${i.previousPrice}' : ''}';
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  elevation: 0,
+                  color: Colors.white,
+                  child: ListTile(
+                    title: Text(i.nameRaw),
+                    subtitle: Text(
+                      [
+                        if (i.categoryName != null) i.categoryName!,
+                        if (priceNote != null) priceNote,
+                      ].join(' · '),
+                    ),
+                    trailing: Text(i.sum),
+                  ),
+                );
+              }),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

@@ -14,34 +14,48 @@ import '../features/financial_health/presentation/financial_health_screen.dart';
 import '../features/goals/presentation/goals_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
+import '../features/onboarding/presentation/welcome_screen.dart';
 import '../features/receipts/presentation/receipts_history_screen.dart';
 import '../features/receipts/presentation/scan_receipt_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../shared/widgets/app_shell.dart';
 
+/// null = still loading from secure storage.
+final onboardingSeenProvider = StateProvider<bool?>((ref) => null);
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authControllerProvider);
+  final onboardingSeen = ref.watch(onboardingSeenProvider);
 
   return GoRouter(
     initialLocation: '/splash',
-    refreshListenable: _AuthListenable(ref),
+    refreshListenable: _RouterListenable(ref),
     redirect: (context, state) {
       final loc = state.matchedLocation;
-      final loggingIn = loc == '/login' || loc == '/register' || loc == '/splash';
+      final authGate = loc == '/login' ||
+          loc == '/register' ||
+          loc == '/splash' ||
+          loc == '/welcome';
 
-      if (auth.status == AuthStatus.unknown) {
+      if (auth.status == AuthStatus.unknown || onboardingSeen == null) {
         return loc == '/splash' ? null : '/splash';
       }
+
       if (auth.status == AuthStatus.unauthenticated) {
-        return loggingIn && loc != '/splash' ? null : '/login';
+        if (!onboardingSeen) {
+          return loc == '/welcome' ? null : '/welcome';
+        }
+        if (loc == '/welcome' || loc == '/splash') return '/login';
+        return authGate && loc != '/splash' ? null : '/login';
       }
-      if (loggingIn || loc == '/splash') {
-        return '/home';
-      }
+
+      // Authenticated → dashboard (first launch after register included).
+      if (authGate) return '/home';
       return null;
     },
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
+      GoRoute(path: '/welcome', builder: (context, state) => const WelcomeScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
       StatefulShellRoute.indexedStack(
@@ -115,7 +129,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: ':id',
-            builder: (context, state) => ReceiptDetailScreen(
+            builder: (context, state) => ReceiptDetailsScreen(
               receiptId: state.pathParameters['id']!,
             ),
           ),
@@ -125,9 +139,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class _AuthListenable extends ChangeNotifier {
-  _AuthListenable(this._ref) {
+class _RouterListenable extends ChangeNotifier {
+  _RouterListenable(this._ref) {
     _ref.listen(authControllerProvider, (_, __) => notifyListeners());
+    _ref.listen(onboardingSeenProvider, (_, __) => notifyListeners());
   }
 
   final Ref _ref;

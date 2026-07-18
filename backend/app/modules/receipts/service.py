@@ -14,11 +14,13 @@ from app.modules.budgets.service import BudgetService
 from app.modules.categorization.service import CategorizationService
 from app.modules.events import get_event_bus
 from app.modules.events.receipt_events import ReceiptCreatedEvent, ReceiptFetchedEvent
+from app.modules.categories.models import Category
 from app.modules.notifications.service import NotificationService
+from app.modules.products.models import ProductPriceHistory
 from app.modules.products.service import ProductService
 from app.modules.receipts.models import Receipt, ReceiptItem, ReceiptStatus
 from app.modules.receipts.repository import ReceiptRepository
-from app.modules.receipts.schemas import ReceiptOut, ReceiptScanRequest
+from app.modules.receipts.schemas import ReceiptItemOut, ReceiptOut, ReceiptScanRequest
 
 
 class ReceiptService:
@@ -42,7 +44,7 @@ class ReceiptService:
             user_id=user_id, fn=data.fn, fd=data.fd, fp=data.fp
         )
         if existing is not None:
-            return self._to_out(existing)
+            return await self._to_out(existing)
 
         receipt = await self._repo.create_pending(
             user_id=user_id,
@@ -68,14 +70,14 @@ class ReceiptService:
         await self.process_receipt(receipt.id, user_id)
         refreshed = await self._repo.get_by_id(receipt.id, user_id)
         assert refreshed is not None
-        return self._to_out(refreshed)
+        return await self._to_out(refreshed)
 
     async def process_receipt(self, receipt_id: UUID, user_id: UUID) -> ReceiptOut:
         receipt = await self._repo.get_by_id(receipt_id, user_id)
         if receipt is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Receipt not found")
         if receipt.status == ReceiptStatus.DONE:
-            return self._to_out(receipt)
+            return await self._to_out(receipt)
 
         receipt.status = ReceiptStatus.FETCHING
         await self._repo.save(receipt)
@@ -146,7 +148,7 @@ class ReceiptService:
 
         refreshed = await self._repo.get_by_id(receipt_id, user_id)
         assert refreshed is not None
-        return self._to_out(refreshed)
+        return await self._to_out(refreshed)
 
     async def _maybe_unusual_spending(self, receipt: Receipt, user_id: UUID) -> None:
         if receipt.total_amount is None:
@@ -188,7 +190,7 @@ class ReceiptService:
         receipt = await self._repo.get_for_users(receipt_id, ids)
         if receipt is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Receipt not found")
-        return self._to_out(receipt)
+        return await self._to_out(receipt)
 
     async def list(
         self,
@@ -200,7 +202,60 @@ class ReceiptService:
     ) -> tuple[list[ReceiptOut], int]:
         ids = scope_user_ids or [user_id]
         rows, total = await self._repo.list_for_users(ids, limit=limit, offset=offset)
-        return [self._to_out(r) for r in rows], total
+        return [await self._to_out(r) for r in rows], total
 
-    def _to_out(self, receipt: Receipt) -> ReceiptOut:
-        return ReceiptOut.model_validate(receipt)
+    async def _to_out(self, receipt: Receipt) -> ReceiptOut:
+        cat_ids = {i.category_id for i in receipt.items if i.category_id}
+        cat_names: dict[UUID, str] = {}
+        if cat_ids:
+            result = await self._session.execute(select(Category).where(Category.id.in_(cat_ids)))
+            cat_names = {c.id: c.name for c in result.scalars().all()}
+
+        items_out: list[ReceiptItemOut] = []
+        for item in receipt.items:
+            prev_price = None
+            change_pct = None
+            if item.product_variant_id is not None and item.price is not None:
+                hist = await self._session.execute(
+                    select(ProductPriceHistory.price)
+                    .where(ProductPriceHistory.product_variant_id == item.product_variant_id)
+                    .order_by(ProductPriceHistory.purchased_at.desc())
+                    .limit(2)
+                )
+                prices = list(hist.scalars().all())
+                if len(prices) >= 2 and Decimal(str(prices[1])) > 0:
+                    prev_price = Decimal(str(prices[1]))
+                    change_pct = float(
+                        ((item.price - prev_price) / prev_price * Decimal("100")).quantize(
+                            Decimal("0.1")
+                        )
+                    )
+            items_out.append(
+                ReceiptItemOut(
+                    id=item.id,
+                    name_raw=item.name_raw,
+                    qty=item.qty,
+                    price=item.price,
+                    sum=item.sum,
+                    category_id=item.category_id,
+                    category_name=cat_names.get(item.category_id) if item.category_id else None,
+                    product_variant_id=item.product_variant_id,
+                    previous_price=prev_price,
+                    price_change_pct=change_pct,
+                )
+            )
+
+        return ReceiptOut(
+            id=receipt.id,
+            fn=receipt.fn,
+            fd=receipt.fd,
+            fp=receipt.fp,
+            status=receipt.status,
+            purchased_at=receipt.purchased_at,
+            total_amount=receipt.total_amount,
+            store_name=receipt.store_name,
+            store_inn=receipt.store_inn,
+            error_message=receipt.error_message,
+            items=items_out,
+            created_at=receipt.created_at,
+        )

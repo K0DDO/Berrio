@@ -4,6 +4,7 @@ import hashlib
 import json
 import time
 from collections import OrderedDict
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -109,7 +110,27 @@ class AiService:
 
         summary = await self._analytics.summary(user_id, period=period)
         insights: list[AiInsightOut] = []
-        if summary.by_category:
+        if summary.total_spend > 0 and summary.by_category:
+            lines = []
+            for cat in summary.by_category[:5]:
+                lines.append(f"{cat.category_name} {cat.share:.0%}")
+            cats_block = "\n".join(lines)
+            # Rough tip: 10% of top category if share high
+            tip_amount = (summary.by_category[0].amount * Decimal("0.1")).quantize(Decimal("1"))
+            tip_name = summary.by_category[0].category_name.lower()
+            insights.append(
+                AiInsightOut(
+                    title="Первый разбор трат",
+                    body=(
+                        f"За последние 30 дней ваши расходы:\n"
+                        f"{summary.total_spend}₽\n\n"
+                        f"Основные категории:\n{cats_block}\n\n"
+                        f"Рекомендация:\nможно сократить «{tip_name}» примерно на {tip_amount}₽"
+                    ),
+                    kind="first_insight",
+                )
+            )
+        if summary.by_category and not any(i.kind == "first_insight" for i in insights):
             top = summary.by_category[0]
             insights.append(
                 AiInsightOut(
