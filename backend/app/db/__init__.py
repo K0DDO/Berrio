@@ -15,6 +15,7 @@ from app.modules.families.models import Family, FamilyMember, FamilyPermission
 from app.modules.financial_health.models import FinancialScore
 from app.modules.goals.models import FinancialGoal
 from app.modules.notifications.models import Notification
+from app.modules.notifications.preferences import NotificationPreferences
 from app.modules.products.models import Product, ProductPriceHistory, ProductVariant
 from app.modules.receipts.models import Receipt, ReceiptItem
 from app.modules.reconciliation.models import ReconciliationMatch
@@ -35,6 +36,7 @@ __all__ = [
     "FinancialGoal",
     "FinancialScore",
     "Notification",
+    "NotificationPreferences",
     "PasswordResetToken",
     "Product",
     "ProductPriceHistory",

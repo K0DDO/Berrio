@@ -12,9 +12,9 @@ from app.db.base import Base
 
 
 class MatchStatus(StrEnum):
+    MATCHED = "MATCHED"
     SUGGESTED = "SUGGESTED"
-    CONFIRMED = "CONFIRMED"
-    REJECTED = "REJECTED"
+    CONFLICT = "CONFLICT"
 
 
 class ReconciliationMatch(Base):
@@ -38,6 +38,7 @@ class ReconciliationMatch(Base):
         Uuid(as_uuid=True), ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("0"))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=MatchStatus.SUGGESTED)
     reasons: Mapped[dict] = mapped_column(
         JSON().with_variant(JSONB(), "postgresql"),

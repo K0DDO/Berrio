@@ -18,6 +18,7 @@ class NotificationOut(BaseModel):
     message: str
     severity: NotificationSeverity
     payload: dict[str, Any] = Field(default_factory=dict)
+    dedupe_key: str | None = None
     created_at: datetime
     read_at: datetime | None
 
@@ -32,3 +33,4 @@ class NotificationCreate(BaseModel):
     message: str
     severity: NotificationSeverity = NotificationSeverity.INFO
     payload: dict[str, Any] = Field(default_factory=dict)
+    dedupe_key: str | None = None

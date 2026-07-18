@@ -6,6 +6,8 @@ Pipeline:
         ↓
   Notification Rules Engine
         ↓
+  Preferences + dedupe gate
+        ↓
   Notification (persisted)
         ↓
   Channels (InApp MVP; Push/Email interfaces ready)
@@ -21,9 +23,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.notifications.channels import InAppChannel, NotificationChannel
-from app.modules.notifications.models import Notification
+from app.modules.notifications.models import Notification, NotificationType
+from app.modules.notifications.preferences import NotificationPreferences
 from app.modules.notifications.rules import NotificationRulesEngine
 from app.modules.notifications.schemas import NotificationCreate, NotificationOut
+
+
+_PREF_MAP = {
+    NotificationType.PRICE_CHANGE: "price_changes_enabled",
+    NotificationType.BUDGET_WARNING: "budget_alerts_enabled",
+    NotificationType.BUDGET_EXCEEDED: "budget_alerts_enabled",
+    NotificationType.GOAL_PROGRESS: "goal_alerts_enabled",
+    NotificationType.AI_INSIGHT: "ai_insights_enabled",
+    NotificationType.UNUSUAL_SPENDING: "unusual_spending_enabled",
+}
 
 
 class NotificationService:
@@ -45,7 +58,21 @@ class NotificationService:
     def register_channel(self, channel: NotificationChannel) -> None:
         self._channels.append(channel)
 
-    async def create_and_dispatch(self, draft: NotificationCreate) -> NotificationOut:
+    async def create_and_dispatch(self, draft: NotificationCreate) -> NotificationOut | None:
+        if not await self._pref_allows(draft.user_id, draft.type):
+            return None
+
+        if draft.dedupe_key:
+            existing = await self._session.execute(
+                select(Notification).where(
+                    Notification.user_id == draft.user_id,
+                    Notification.dedupe_key == draft.dedupe_key,
+                )
+            )
+            found = existing.scalar_one_or_none()
+            if found is not None:
+                return NotificationOut.model_validate(found)
+
         row = Notification(
             user_id=draft.user_id,
             family_id=draft.family_id,
@@ -54,6 +81,7 @@ class NotificationService:
             message=draft.message,
             severity=draft.severity.value,
             payload=draft.payload,
+            dedupe_key=draft.dedupe_key,
         )
         self._session.add(row)
         await self._session.flush()
@@ -62,7 +90,12 @@ class NotificationService:
         return NotificationOut.model_validate(row)
 
     async def dispatch_many(self, drafts: list[NotificationCreate]) -> list[NotificationOut]:
-        return [await self.create_and_dispatch(d) for d in drafts]
+        out: list[NotificationOut] = []
+        for d in drafts:
+            created = await self.create_and_dispatch(d)
+            if created is not None:
+                out.append(created)
+        return out
 
     async def list_for_user(
         self,
@@ -97,19 +130,19 @@ class NotificationService:
             await self._session.flush()
         return NotificationOut.model_validate(row)
 
-    # ---- Legacy shim used by older call sites (budgets/goals before rules) ----
     async def notify(
         self,
         *,
         user_id: UUID,
-        type,  # NotificationType
+        type,
         title: str,
         message: str,
         family_id: UUID | None = None,
         severity=None,
         payload: dict | None = None,
-    ) -> NotificationOut:
-        from app.modules.notifications.models import NotificationSeverity, NotificationType
+        dedupe_key: str | None = None,
+    ) -> NotificationOut | None:
+        from app.modules.notifications.models import NotificationSeverity
 
         ntype = type if isinstance(type, NotificationType) else NotificationType(str(type))
         sev = severity or NotificationSeverity.INFO
@@ -124,5 +157,18 @@ class NotificationService:
                 message=message,
                 severity=sev,
                 payload=payload or {},
+                dedupe_key=dedupe_key,
             )
         )
+
+    async def _pref_allows(self, user_id: UUID, ntype: NotificationType) -> bool:
+        attr = _PREF_MAP.get(ntype)
+        if attr is None:
+            return True
+        result = await self._session.execute(
+            select(NotificationPreferences).where(NotificationPreferences.user_id == user_id)
+        )
+        prefs = result.scalar_one_or_none()
+        if prefs is None:
+            return True
+        return bool(getattr(prefs, attr, True))

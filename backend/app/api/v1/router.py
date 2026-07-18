@@ -7,6 +7,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.banks.router import router as banks_router
 from app.modules.budgets.router import router as budgets_router
 from app.modules.categories.router import router as categories_router
+from app.modules.dashboard.router import router as dashboard_router
 from app.modules.families.router import router as families_router
 from app.modules.financial_health.router import router as health_router
 from app.modules.goals.router import router as goals_router
@@ -17,6 +18,7 @@ from app.modules.reconciliation.router import router as reconciliation_router
 api_router = APIRouter()
 api_router.include_router(system.router, tags=["system"])
 api_router.include_router(auth_router)
+api_router.include_router(dashboard_router)
 api_router.include_router(receipts_router)
 api_router.include_router(categories_router)
 api_router.include_router(analytics_router)

@@ -12,7 +12,8 @@ from app.modules.receipts.models import Receipt, ReceiptStatus
 from app.modules.reconciliation.engine import ReconciliationEngine
 
 
-def test_engine_scores_exact_amount_and_merchant() -> None:
+@pytest.mark.asyncio
+async def test_engine_scores_exact_amount_and_merchant() -> None:
     engine = ReconciliationEngine()
     now = datetime.now(UTC)
     receipt = Receipt(
@@ -35,10 +36,11 @@ def test_engine_scores_exact_amount_and_merchant() -> None:
         booked_at=now,
         external_id="ext-1",
     )
-    candidate = engine.score_pair(receipt, tx)
+    candidate = await engine.score_pair(receipt, tx)
     assert candidate is not None
     assert candidate.score >= Decimal("80")
     assert candidate.reasons["amount"] == "exact"
+    assert candidate.confidence > 0
 
 
 @pytest.mark.asyncio
@@ -85,19 +87,22 @@ async def test_reconciliation_run_confirm(client: AsyncClient) -> None:
 
     run = await client.post("/api/v1/reconciliation/run", headers=headers)
     assert run.status_code == 200, run.text
-    # May or may not match depending on FNS stub store/total — assert API shape
     body = run.json()
     assert "created" in body
     assert "suggestions" in body
 
-    suggestions = await client.get("/api/v1/reconciliation/suggestions", headers=headers)
-    assert suggestions.status_code == 200
-
-    if suggestions.json():
-        mid = suggestions.json()[0]["id"]
-        confirmed = await client.post(
-            f"/api/v1/reconciliation/{mid}/confirm",
+    for status in ("SUGGESTED", "MATCHED", "CONFLICT"):
+        suggestions = await client.get(
+            f"/api/v1/reconciliation/suggestions?status={status}",
             headers=headers,
         )
-        assert confirmed.status_code == 200
-        assert confirmed.json()["status"] == "CONFIRMED"
+        assert suggestions.status_code == 200
+        if suggestions.json():
+            mid = suggestions.json()[0]["id"]
+            confirmed = await client.post(
+                f"/api/v1/reconciliation/{mid}/confirm",
+                headers=headers,
+            )
+            assert confirmed.status_code == 200
+            assert confirmed.json()["status"] == "MATCHED"
+            break

@@ -16,6 +16,7 @@ import '../features/home/presentation/home_screen.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/receipts/presentation/receipts_history_screen.dart';
 import '../features/receipts/presentation/scan_receipt_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
 import '../shared/widgets/app_shell.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -98,6 +99,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'receipts',
                     builder: (context, state) => const ReceiptsHistoryScreen(),
                   ),
+                  GoRoute(
+                    path: 'settings',
+                    builder: (context, state) => const SettingsScreen(),
+                  ),
                 ],
               ),
             ],
@@ -149,6 +154,7 @@ class _MoreHubScreen extends ConsumerWidget {
       (title: 'Budgets', path: '/more/budgets', icon: Icons.pie_chart_outline),
       (title: 'Family', path: '/more/family', icon: Icons.family_restroom),
       (title: 'Receipts', path: '/receipts', icon: Icons.receipt_long),
+      (title: 'Settings', path: '/more/settings', icon: Icons.settings_outlined),
     ];
 
     return Scaffold(

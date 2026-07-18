@@ -14,6 +14,7 @@ class ReconciliationMatchOut(BaseModel):
     receipt_id: UUID
     transaction_id: UUID
     score: Decimal
+    confidence: Decimal = Decimal("0")
     status: str
     reasons: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime

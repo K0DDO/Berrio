@@ -51,6 +51,7 @@ class NotificationRulesEngine:
                         "rule": "spent >= 100%",
                         "explanation": "Spend reached or exceeded the budget limit.",
                     },
+                    dedupe_key=f"budget_exceeded:{budget_id}",
                 )
             )
         elif usage >= Decimal("80"):
@@ -73,6 +74,7 @@ class NotificationRulesEngine:
                         "rule": "spent >= 80%",
                         "explanation": "Spend crossed the 80% warning threshold.",
                     },
+                    dedupe_key=f"budget_warn:{budget_id}",
                 )
             )
         return drafts
@@ -114,6 +116,7 @@ class NotificationRulesEngine:
                 "rule": "same ProductVariant price increased",
                 "explanation": f"Price rose by {delta_pct:.0f}% vs last observed purchase.",
             },
+            dedupe_key=f"price:{variant_id}:{old_price}:{new_price}",
         )
 
     def goal_progress(
@@ -146,6 +149,7 @@ class NotificationRulesEngine:
                     "rule": "current >= target",
                     "explanation": "Goal target amount was reached.",
                 },
+                dedupe_key=f"goal_done:{goal_id}",
             )
         if remaining <= Decimal("20") and remaining > 0:
             return NotificationCreate(
@@ -165,6 +169,7 @@ class NotificationRulesEngine:
                     "rule": "remaining <= 20%",
                     "explanation": "Less than or equal to 20% of the goal amount remains.",
                 },
+                dedupe_key=f"goal_near:{goal_id}",
             )
         return None
 
@@ -200,4 +205,5 @@ class NotificationRulesEngine:
                 "rule": f"amount >= {multiplier}x rolling average",
                 "explanation": "Receipt total is significantly above your recent average spend.",
             },
+            dedupe_key=f"unusual:{receipt_id}",
         )

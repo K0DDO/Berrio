@@ -24,7 +24,7 @@ class ReconciliationService:
         txs = await self._unmatched_transactions(user_id)
         locked = await self._locked_ids(user_id)
 
-        candidates = self._engine.suggest(
+        candidates = await self._engine.suggest(
             receipts,
             txs,
             used_receipts=locked["receipts"],
@@ -46,7 +46,8 @@ class ReconciliationService:
                 receipt_id=c.receipt_id,
                 transaction_id=c.transaction_id,
                 score=c.score,
-                status=MatchStatus.SUGGESTED,
+                confidence=c.confidence,
+                status=c.decision.value,
                 reasons=c.reasons,
             )
             self._session.add(row)
@@ -76,9 +77,7 @@ class ReconciliationService:
 
     async def confirm(self, user_id: UUID, match_id: UUID) -> ReconciliationMatchOut:
         row = await self._get(user_id, match_id)
-        if row.status == MatchStatus.REJECTED:
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="Match was rejected")
-        row.status = MatchStatus.CONFIRMED
+        row.status = MatchStatus.MATCHED
         row.decided_at = datetime.now(UTC)
         await self._session.flush()
         await self._audit.record(
@@ -91,9 +90,9 @@ class ReconciliationService:
 
     async def reject(self, user_id: UUID, match_id: UUID) -> ReconciliationMatchOut:
         row = await self._get(user_id, match_id)
-        if row.status == MatchStatus.CONFIRMED:
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="Match was confirmed")
-        row.status = MatchStatus.REJECTED
+        if row.status == MatchStatus.MATCHED:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Match already confirmed")
+        row.status = MatchStatus.CONFLICT
         row.decided_at = datetime.now(UTC)
         await self._session.flush()
         await self._audit.record(
@@ -119,7 +118,7 @@ class ReconciliationService:
     async def _unmatched_receipts(self, user_id: UUID) -> list[Receipt]:
         confirmed = select(ReconciliationMatch.receipt_id).where(
             ReconciliationMatch.user_id == user_id,
-            ReconciliationMatch.status == MatchStatus.CONFIRMED,
+            ReconciliationMatch.status == MatchStatus.MATCHED,
         )
         result = await self._session.execute(
             select(Receipt).where(
@@ -133,7 +132,7 @@ class ReconciliationService:
     async def _unmatched_transactions(self, user_id: UUID) -> list[Transaction]:
         confirmed = select(ReconciliationMatch.transaction_id).where(
             ReconciliationMatch.user_id == user_id,
-            ReconciliationMatch.status == MatchStatus.CONFIRMED,
+            ReconciliationMatch.status == MatchStatus.MATCHED,
         )
         result = await self._session.execute(
             select(Transaction).where(
@@ -147,7 +146,9 @@ class ReconciliationService:
         result = await self._session.execute(
             select(ReconciliationMatch).where(
                 ReconciliationMatch.user_id == user_id,
-                ReconciliationMatch.status.in_([MatchStatus.CONFIRMED, MatchStatus.SUGGESTED]),
+                ReconciliationMatch.status.in_(
+                    [MatchStatus.MATCHED, MatchStatus.SUGGESTED, MatchStatus.CONFLICT]
+                ),
             )
         )
         receipts: set = set()
