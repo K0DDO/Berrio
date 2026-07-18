@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     kimi_base_url: str = "https://api.moonshot.cn/v1"
     kimi_model: str = "moonshot-v1-8k"
 
+    # FNS / OFD receipt provider (proverkacheka.com partner API)
+    fns_provider: str = "auto"  # auto | stub | proverkacheka
+    fns_api_token: str | None = None
+    fns_api_url: str = "https://proverkacheka.com/api/v1/check/get"
+
     database_url: str = "postgresql+asyncpg://berrio:berrio@localhost:5432/berrio"
     database_url_sync: str = "postgresql://berrio:berrio@localhost:5432/berrio"
 
