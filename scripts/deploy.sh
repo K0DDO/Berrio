@@ -2,7 +2,7 @@
 # Berrio production deploy on the VPS.
 #
 # Usage:
-#   cd /opt/berrio && ./scripts/deploy.sh
+#   cd ~/berrio && ./scripts/deploy.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

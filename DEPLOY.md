@@ -12,13 +12,12 @@ Berrio is an **isolated Compose project** (`name: berrio`): own containers, own 
 
 ```
 deploy@VPS
- ├── /opt/<your-complex-bot>/     # already yours via deploy
- ├── /opt/berrio/                 # same user, same style
- └── Docker
-      ├── amnezia-* containers   # leave untouched
-      ├── bot containers         # leave untouched
-      └── berrio-*               # new project only
+ ├── ~/…/complex-bot/     # already yours
+ ├── ~/berrio/            # recommended (no sudo)
+ └── Docker: amnezia + bots + berrio (isolated)
 ```
+
+Optional later (only if root creates it once): `~/berrio`.
 
 | Rule | Why |
 |------|-----|
@@ -47,17 +46,16 @@ Internet (optional nginx :80)
 
 Postgres and Redis are **not** published on the host — no clash with other DBs.
 
-Layout:
+Layout (no sudo):
 
 ```
-/opt/berrio/
+~/berrio/
 ├── docker-compose.production.yml
 ├── .env.production
 ├── scripts/{deploy,backup}.sh
-├── backend/
-└── deploy/nginx/berrio.conf
+└── …
 
-/opt/backups/berrio/          # dumps for this app only
+~/backups/berrio/          # dumps for this app only
 ```
 
 ---
@@ -76,7 +74,7 @@ ss -tulpn | grep -E ':80|:443|:8000|:8080' || true
 Note:
 
 - Which ports are already taken (especially **80**, **443**, **8000**)
-- Where the complex bot lives (e.g. `/opt/...`) — put Berrio next to it under `/opt/berrio`
+- Where the complex bot lives (e.g. `/opt/...`) — put Berrio next to it under `~/berrio`
 - That Amnezia containers stay running after any change (`docker ps`)
 
 If `deploy` is not in `docker` group, ask root once:
@@ -88,32 +86,32 @@ sudo usermod -aG docker deploy
 
 ---
 
-## 1. Prepare folders (minimal — reuse existing user)
+## 1. Prepare folders (no sudo — use home)
 
-**Do not** run `adduser deploy` if the user already exists.
-
-As `deploy` (or root only for mkdir/chown if needed):
+`deploy` often **cannot** use `sudo` and **cannot** write to `/opt`. That is fine.
 
 ```bash
-sudo mkdir -p /opt/berrio /opt/backups/berrio
-sudo chown -R deploy:deploy /opt/berrio /opt/backups/berrio
+# as deploy — NO sudo
+mkdir -p ~/berrio ~/backups/berrio
+cd ~
+# if ~/berrio is empty, clone into it:
+git clone https://github.com/K0DDO/Berrio.git berrio
+cd ~/berrio
 ```
 
-Packages only if missing:
+If someone with root later wants `~/berrio`:
 
 ```bash
-# as root or via sudo — skip what you already have
-sudo apt update
-sudo apt install -y git curl
-# nginx only if you will use it and :80 is free:
-# sudo apt install -y nginx
+# as root only
+mkdir -p ~/berrio ~/backups/berrio
+chown -R deploy:deploy ~/berrio ~/backups/berrio
+# then move or re-clone there; set GitHub secret BERRIO_PATH=~/berrio
 ```
 
-Docker is already installed — **do not** re-run `get.docker.com`.
-
-Confirm Compose plugin:
+Packages only if missing (ask root if you have no sudo):
 
 ```bash
+# docker compose should already work for deploy (same as your bot)
 docker compose version
 ```
 
@@ -123,12 +121,10 @@ docker compose version
 
 ```bash
 ssh deploy@SERVER_IP
-cd /opt
-git clone https://github.com/K0DDO/Berrio.git berrio
-cd /opt/berrio
+cd ~/berrio   # or: cd ~/berrio if root prepared it
 ```
 
-If the repo already exists: `cd /opt/berrio && git pull`.
+If the repo already exists: `cd ~/berrio && git pull`.
 
 ### 2.1 Secrets
 
@@ -160,7 +156,7 @@ Then health/docs become `http://127.0.0.1:8088/health` (and update nginx `proxy_
 ### 2.2 Start only Berrio
 
 ```bash
-cd /opt/berrio
+cd ~/berrio
 chmod +x scripts/*.sh
 
 docker compose \
@@ -216,7 +212,7 @@ curl -fsS http://SERVER_IP:8000/health
 **Add nginx** only when `:80` is free or you can add a **separate** `server_name` without stealing `default_server`.
 
 ```bash
-sudo cp /opt/berrio/deploy/nginx/berrio.conf /etc/nginx/sites-available/berrio
+sudo cp ~/berrio/deploy/nginx/berrio.conf /etc/nginx/sites-available/berrio
 sudo sed -i "s/SERVER_IP/YOUR_REAL_IP/g" /etc/nginx/sites-available/berrio
 # if API_HOST_PORT ≠ 8000, edit proxy_pass in that file
 sudo ln -sf /etc/nginx/sites-available/berrio /etc/nginx/sites-enabled/berrio
@@ -253,16 +249,16 @@ With `API_BIND=127.0.0.1` you typically **do not** open `8000` in UFW.
 ```bash
 # as deploy
 ./scripts/backup.sh
-# → /opt/backups/berrio/berrio_*.sql.gz (7 days)
+# → ~/backups/berrio/berrio_*.sql.gz (7 days)
 
 crontab -e
-15 3 * * * /opt/berrio/scripts/backup.sh >> /opt/backups/berrio/backup.log 2>&1
+15 3 * * * ~/berrio/scripts/backup.sh >> ~/backups/berrio/backup.log 2>&1
 ```
 
 Update:
 
 ```bash
-cd /opt/berrio && ./scripts/deploy.sh
+cd ~/berrio && ./scripts/deploy.sh
 ```
 
 (`backup → pull → build → migrate → up → health`, rollback on failure)
@@ -281,9 +277,9 @@ Secrets:
 
 If Actions already deploy your complex bot as `deploy`, reuse the same key **or** add a second key for Berrio — both are fine.
 
-Ensure `/opt/berrio` is a git checkout that `deploy` can `git pull`.
+Ensure `~/berrio` is a git checkout that `deploy` can `git pull`.
 
-Workflow: `.github/workflows/deploy.yml` → SSH → `/opt/berrio` → `./scripts`-style steps.
+Workflow: `.github/workflows/deploy.yml` → SSH → `~/berrio` → `./scripts`-style steps.
 
 ---
 
@@ -308,14 +304,14 @@ flutter build apk --release --dart-define=API_URL=https://api.berrio.com
 - [ ] Host port for API free or remapped (`API_HOST_PORT`)
 - [ ] `API_BIND=127.0.0.1` in steady state
 - [ ] UFW / Amnezia ports unchanged except intentional adds
-- [ ] Backups under `/opt/backups/berrio` only
+- [ ] Backups under `~/backups/berrio` only
 
 ---
 
 ## 9. Useful commands
 
 ```bash
-cd /opt/berrio
+cd ~/berrio
 COMPOSE="docker compose -f docker-compose.production.yml --env-file .env.production"
 
 $COMPOSE ps
