@@ -28,15 +28,11 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          # Optional; default on server is $HOME/berrio (no sudo needed)
-          BERRIO_PATH: ${{ secrets.BERRIO_PATH }}
         run: |
           set -euo pipefail
-          ssh -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" \
-            "export BERRIO_PATH='${BERRIO_PATH:-}'; bash -s" <<'REMOTE'
+          ssh -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" bash -s <<'REMOTE'
           set -euo pipefail
-          APP_DIR="${BERRIO_PATH:-$HOME/berrio}"
-          cd "${APP_DIR}"
+          cd /opt/berrio
 
           COMPOSE="docker compose -f docker-compose.production.yml --env-file .env.production"
           API_HOST_PORT="$(grep -E '^API_HOST_PORT=' .env.production 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' || true)"

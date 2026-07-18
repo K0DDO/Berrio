@@ -6,22 +6,23 @@ Repository: https://github.com/K0DDO/Berrio.git
 
 Berrio is an **isolated Compose project** (`name: berrio`): own containers, own volumes, own bridge network. It must not share Postgres/Redis with the bots and must not fight Amnezia for VPN ports.
 
+**App path (fixed):** `/opt/berrio`  
+**Backups:** `/opt/backups/berrio`
+
 ---
 
-## Shared VPS model (recommended for you)
+## Shared VPS model
 
 ```
 deploy@VPS
- ├── ~/…/complex-bot/     # already yours
- ├── ~/berrio/            # recommended (no sudo)
+ ├── /opt/<your-complex-bot>/
+ ├── /opt/berrio/              ← Berrio (owned by deploy)
  └── Docker: amnezia + bots + berrio (isolated)
 ```
 
-Optional later (only if **root** creates it once): `/opt/berrio`.
-
 | Rule | Why |
 |------|-----|
-| Work as **`deploy`** | Same access model as the complex bot |
+| Work as **`deploy`** after root prepares `/opt/berrio` | Same access model as the complex bot |
 | Do **not** recreate `deploy` / reinstall Docker | Avoid breaking Amnezia and bots |
 | Do **not** `ufw --force reset` | Can lock you out or kill VPN ports |
 | Prefer `API_BIND=127.0.0.1` | API not public next to VPN |
@@ -44,75 +45,43 @@ Internet (optional nginx :80)
             (private net)    (private)      (Celery)
 ```
 
-Postgres and Redis are **not** published on the host — no clash with other DBs.
-
-Layout (no sudo):
+Layout:
 
 ```
-~/berrio/
+/opt/berrio/
 ├── docker-compose.production.yml
 ├── .env.production
 ├── scripts/{deploy,backup}.sh
-└── …
+├── backend/
+└── deploy/nginx/berrio.conf
 
-~/backups/berrio/          # dumps for this app only
+/opt/backups/berrio/
 ```
 
 ---
 
-## 0. Inventory (as `deploy` — do this first)
+## 0. Inventory (as `deploy`)
 
 ```bash
 ssh deploy@SERVER_IP
-
-whoami                    # expect: deploy
-groups                    # expect: … docker …
+whoami
+groups
 docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Status}}'
 ss -tulpn | grep -E ':80|:443|:8000|:8080' || true
 ```
 
-Note:
-
-- Which ports are already taken (especially **80**, **443**, **8000**)
-- Where the complex bot lives (e.g. `/opt/...`) — put Berrio next to it under `~/berrio`
-- That Amnezia containers stay running after any change (`docker ps`)
-
-If `deploy` is not in `docker` group, ask root once:
-
-```bash
-sudo usermod -aG docker deploy
-# then re-login as deploy
-```
-
 ---
 
-## 1. Prepare folders (no sudo — use home)
+## 1. Prepare `/opt/berrio` (as root / admin — once)
 
-`deploy` often **cannot** use `sudo` and **cannot** write to `/opt`. That is fine.
-
-```bash
-# as deploy — NO sudo
-mkdir -p ~/berrio ~/backups/berrio
-cd ~
-# if ~/berrio is empty, clone into it:
-git clone https://github.com/K0DDO/Berrio.git berrio
-cd ~/berrio
-```
-
-If someone with root later wants `/opt/berrio`:
+`deploy` normally cannot create `/opt` itself. Do this **once** as root:
 
 ```bash
-# as root only
-mkdir -p /opt/berrio /opt/backups/berrio
-chown -R deploy:deploy /opt/berrio /opt/backups/berrio
-# then clone/move there; set GitHub secret BERRIO_PATH=/opt/berrio
-```
+ssh root@SERVER_IP   # or admin with sudo
 
-Packages only if missing (ask root if you have no sudo):
-
-```bash
-# docker compose should already work for deploy (same as your bot)
-docker compose version
+sudo mkdir -p /opt/berrio /opt/backups/berrio
+sudo chown -R deploy:deploy /opt/berrio /opt/backups/berrio
+ls -la /opt | grep berrio
 ```
 
 ---
@@ -121,10 +90,18 @@ docker compose version
 
 ```bash
 ssh deploy@SERVER_IP
-cd ~/berrio   # or: cd ~/berrio if root prepared it
+cd /opt/berrio
+git clone https://github.com/K0DDO/Berrio.git .
+# if folder already has a clone: git pull
 ```
 
-If the repo already exists: `cd ~/berrio && git pull`.
+If you previously cloned into `~/berrio`, move it:
+
+```bash
+rsync -a ~/berrio/ /opt/berrio/
+rm -rf ~/berrio
+cd /opt/berrio
+```
 
 ### 2.1 Secrets
 
@@ -132,205 +109,92 @@ If the repo already exists: `cd ~/berrio && git pull`.
 cp .env.production.example .env.production
 chmod 600 .env.production
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+nano .env.production
 ```
 
-Fill at least: `SECRET_KEY`, `JWT_SECRET`, `EMAIL_HASH_PEPPER`, `FIELD_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, and replace `CHANGE_ME` in `DATABASE_URL` / `DATABASE_URL_SYNC`.
+Fill: `SECRET_KEY`, `JWT_SECRET`, `EMAIL_HASH_PEPPER`, `FIELD_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, replace `CHANGE_ME` in DB URLs, `CORS_ORIGINS`, `FNS_API_TOKEN` (optional), keep `API_BIND=127.0.0.1`.
 
-**Shared-VPS defaults in `.env.production`:**
-
-```env
-API_BIND=127.0.0.1
-API_HOST_PORT=8000
-ENABLE_API_DOCS=true
-CORS_ORIGINS=["http://SERVER_IP","http://SERVER_IP:8000"]
-```
-
-If `8000` is already used by a bot:
-
-```env
-API_HOST_PORT=8088
-```
-
-Then health/docs become `http://127.0.0.1:8088/health` (and update nginx `proxy_pass` accordingly).
-
-### 2.2 Start only Berrio
+### 2.2 Start
 
 ```bash
-cd ~/berrio
+cd /opt/berrio
 chmod +x scripts/*.sh
-
-docker compose \
-  -f docker-compose.production.yml \
-  --env-file .env.production \
-  up -d --build
-```
-
-This creates containers/volumes/networks prefixed by project **`berrio`**. Existing Amnezia/bot containers stay as they are.
-
-### 2.3 Verify (without touching other stacks)
-
-```bash
-docker compose -f docker-compose.production.yml --env-file .env.production ps
-docker ps --filter name=berrio
-
+docker compose -f docker-compose.production.yml --env-file .env.production up -d --build
 curl -fsS http://127.0.0.1:8000/health
-# → {"status":"ok","service":"Berrio"}
-
-# Still healthy?
-docker ps --format '{{.Names}}' | head
-```
-
-Swagger (docs enabled): open via SSH tunnel from your PC if API is bound to localhost:
-
-```bash
-# on laptop
-ssh -L 8000:127.0.0.1:8000 deploy@SERVER_IP
-# browser: http://127.0.0.1:8000/docs
-```
-
-Or temporarily (smoke only):
-
-```env
-API_BIND=0.0.0.0
-```
-
-```bash
-docker compose -f docker-compose.production.yml --env-file .env.production up -d
-curl -fsS http://SERVER_IP:8000/health
-# then set API_BIND=127.0.0.1 again
+docker ps
 ```
 
 ---
 
-## 3. Nginx (optional on a busy host)
-
-**Skip nginx** if:
-
-- Amnezia or another panel already owns `:80` / `:443`, or
-- you are fine with API on `API_HOST_PORT` + SSH tunnel / later domain
-
-**Add nginx** only when `:80` is free or you can add a **separate** `server_name` without stealing `default_server`.
+## 3. Nginx (optional)
 
 ```bash
-sudo cp ~/berrio/deploy/nginx/berrio.conf /etc/nginx/sites-available/berrio
+sudo cp /opt/berrio/deploy/nginx/berrio.conf /etc/nginx/sites-available/berrio
 sudo sed -i "s/SERVER_IP/YOUR_REAL_IP/g" /etc/nginx/sites-available/berrio
-# if API_HOST_PORT ≠ 8000, edit proxy_pass in that file
 sudo ln -sf /etc/nginx/sites-available/berrio /etc/nginx/sites-enabled/berrio
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Do **not** delete other sites in `sites-enabled` (bots / panels).
-
-Later domain: change `server_name` → `api.berrio.com`, then certbot.
-
 ---
 
-## 4. Firewall (careful)
+## 4. Firewall
 
-Do **not** reset UFW. Only add what you need:
-
-```bash
-sudo ufw status
-# usually SSH already allowed; Amnezia has its own ports — leave them
-
-# only if you publish API publicly for a test:
-# sudo ufw allow 8000/tcp
-
-# only if nginx serves Berrio on :80 and http is not already open:
-# sudo ufw allow http
-```
-
-With `API_BIND=127.0.0.1` you typically **do not** open `8000` in UFW.
+Do not reset UFW. Only add rules you need. With `API_BIND=127.0.0.1` you usually do **not** open `8000`.
 
 ---
 
 ## 5. Backups & deploy scripts
 
 ```bash
-# as deploy
+cd /opt/berrio
 ./scripts/backup.sh
-# → ~/backups/berrio/berrio_*.sql.gz (7 days)
+# → /opt/backups/berrio/berrio_*.sql.gz
 
 crontab -e
-15 3 * * * ~/berrio/scripts/backup.sh >> ~/backups/berrio/backup.log 2>&1
+15 3 * * * /opt/berrio/scripts/backup.sh >> /opt/backups/berrio/backup.log 2>&1
 ```
-
-Update:
 
 ```bash
-cd ~/berrio && ./scripts/deploy.sh
+cd /opt/berrio && ./scripts/deploy.sh
 ```
-
-(`backup → pull → build → migrate → up → health`, rollback on failure)
 
 ---
 
-## 6. GitHub Actions (same `deploy` user)
-
-Secrets:
+## 6. GitHub Actions
 
 | Secret | Value |
 |--------|--------|
 | `VPS_HOST` | Server IP |
-| `VPS_USER` | **`deploy`** (existing) |
-| `VPS_SSH_KEY` | Private key that already reaches `deploy` (or a new key appended to `~deploy/.ssh/authorized_keys`) |
+| `VPS_USER` | `deploy` |
+| `VPS_SSH_KEY` | Private key for `deploy` |
 
-If Actions already deploy your complex bot as `deploy`, reuse the same key **or** add a second key for Berrio — both are fine.
-
-Ensure `~/berrio` is a git checkout that `deploy` can `git pull`.
-
-Workflow: `.github/workflows/deploy.yml` → SSH → `~/berrio` → `./scripts`-style steps.
+Workflow deploys to **`/opt/berrio`**.
 
 ---
 
 ## 7. Mobile
 
 ```bash
-# API published only on localhost → use nginx :80 or temporary public bind
 flutter run --dart-define=API_URL=http://SERVER_IP:8000
-
-# after nginx / domain
-flutter run --dart-define=API_URL=http://SERVER_IP
-flutter build apk --release --dart-define=API_URL=https://api.berrio.com
+# later: https://api.berrio.com
 ```
 
 ---
 
-## 8. Coexistence checklist
+## 8. Checklist
 
-- [ ] Logged in as **`deploy`**, member of `docker`
-- [ ] `docker ps` still shows Amnezia + bots after Berrio `up`
-- [ ] Berrio volumes named under project `berrio` (not shared with bots)
-- [ ] Host port for API free or remapped (`API_HOST_PORT`)
-- [ ] `API_BIND=127.0.0.1` in steady state
-- [ ] UFW / Amnezia ports unchanged except intentional adds
-- [ ] Backups under `~/backups/berrio` only
-
----
-
-## 9. Useful commands
+- [ ] `/opt/berrio` owned by `deploy:deploy`
+- [ ] Amnezia + bots still up after `compose up`
+- [ ] `API_BIND=127.0.0.1`
+- [ ] Secrets only in `.env.production`
+- [ ] Backups in `/opt/backups/berrio`
 
 ```bash
-cd ~/berrio
+cd /opt/berrio
 COMPOSE="docker compose -f docker-compose.production.yml --env-file .env.production"
-
 $COMPOSE ps
-$COMPOSE logs -f api worker
-$COMPOSE down          # stops ONLY berrio — not Amnezia/bots
-docker ps              # confirm others still up
+$COMPOSE logs -f api
+$COMPOSE down   # only Berrio
 ```
 
----
-
-## 10. Related files
-
-| File | Purpose |
-|------|---------|
-| `docker-compose.production.yml` | Isolated prod stack |
-| `.env.production.example` | Secrets + `API_BIND` / `API_HOST_PORT` |
-| `scripts/deploy.sh` / `scripts/backup.sh` | Ops as `deploy` |
-| `deploy/nginx/berrio.conf` | Optional reverse proxy |
-| `.github/workflows/deploy.yml` | CD via `VPS_USER=deploy` |
-
-Local development: `docs/local-development.md`.  
-Clean-server path is the same stack; this doc prefers **reuse `deploy` + don’t touch VPN/bots**.
+Related: `docker-compose.production.yml`, `.env.production.example`, `scripts/*`, `deploy/nginx/berrio.conf`, `.github/workflows/deploy.yml`.

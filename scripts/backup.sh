@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-${ROOT}/docker-compose.production.yml}"
 ENV_FILE="${ENV_FILE:-${ROOT}/.env.production}"
-BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/berrio}"
+BACKUP_DIR="${BACKUP_DIR:-/opt/backups/berrio}"
 KEEP_DAYS="${KEEP_DAYS:-7}"
 
 mkdir -p "${BACKUP_DIR}"
