@@ -17,7 +17,7 @@ deploy@VPS
  └── Docker: amnezia + bots + berrio (isolated)
 ```
 
-Optional later (only if root creates it once): `~/berrio`.
+Optional later (only if **root** creates it once): `/opt/berrio`.
 
 | Rule | Why |
 |------|-----|
@@ -99,13 +99,13 @@ git clone https://github.com/K0DDO/Berrio.git berrio
 cd ~/berrio
 ```
 
-If someone with root later wants `~/berrio`:
+If someone with root later wants `/opt/berrio`:
 
 ```bash
 # as root only
-mkdir -p ~/berrio ~/backups/berrio
-chown -R deploy:deploy ~/berrio ~/backups/berrio
-# then move or re-clone there; set GitHub secret BERRIO_PATH=~/berrio
+mkdir -p /opt/berrio /opt/backups/berrio
+chown -R deploy:deploy /opt/berrio /opt/backups/berrio
+# then clone/move there; set GitHub secret BERRIO_PATH=/opt/berrio
 ```
 
 Packages only if missing (ask root if you have no sudo):
