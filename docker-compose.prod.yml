@@ -1,0 +1,108 @@
+# Production compose — do not bind-mount source; use secrets via .env.prod
+#
+#   cp backend/.env.prod.example backend/.env.prod   # edit secrets
+#   docker compose -f docker-compose.prod.yml --env-file backend/.env.prod up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-berrio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-berrio}
+    volumes:
+      - berrio_pg_prod:/var/lib/postgresql/data
+      - ./backend/backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-berrio} -d ${POSTGRES_DB:-berrio}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - berrio_net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - berrio_redis_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - berrio_net
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-berrio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-berrio}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-berrio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-berrio}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["/bin/sh", "/app/scripts/entrypoint.prod.sh"]
+    expose:
+      - "8000"
+    networks:
+      - berrio_net
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-berrio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-berrio}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-berrio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-berrio}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app worker --loglevel=INFO
+    networks:
+      - berrio_net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      - berrio_net
+
+volumes:
+  berrio_pg_prod:
+  berrio_redis_prod:
+  caddy_data:
+  caddy_config:
+
+networks:
+  berrio_net:
+    driver: bridge

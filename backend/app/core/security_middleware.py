@@ -72,9 +72,12 @@ def warn_insecure_defaults() -> list[str]:
     """Return warnings for known insecure default settings (startup / review)."""
     settings = get_settings()
     issues: list[str] = []
-    if settings.secret_key.startswith("dev-only"):
+    if not settings.secret_key or settings.secret_key.startswith("dev-only") or settings.secret_key == "change-me-in-production-use-long-random-string":
         issues.append("SECRET_KEY is still the development default")
-    if settings.email_hash_pepper.startswith("berrio-email-pepper"):
+    if (
+        not settings.email_hash_pepper
+        or settings.email_hash_pepper.startswith("berrio-email-pepper")
+    ):
         issues.append("EMAIL_HASH_PEPPER is still the development default")
     if not settings.field_encryption_key and settings.app_env == "production":
         issues.append("FIELD_ENCRYPTION_KEY is unset in production")
