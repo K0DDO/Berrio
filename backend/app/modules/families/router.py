@@ -10,6 +10,9 @@ from app.modules.families.service import (
     FamilyCreate,
     FamilyOut,
     FamilyService,
+    InviteAccept,
+    InviteCreate,
+    InviteOut,
     MemberOut,
     PermissionUpdate,
 )
@@ -39,6 +42,18 @@ async def list_families(
     return [FamilyOut.model_validate(r) for r in rows]
 
 
+@router.post("/invites/accept", response_model=MemberOut)
+async def accept_invite(
+    body: InviteAccept,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> MemberOut:
+    service = FamilyService(session)
+    result = await service.accept_invite(user_id, body)
+    await session.commit()
+    return result
+
+
 @router.get("/{family_id}/members", response_model=list[MemberOut])
 async def list_members(
     family_id: UUID,
@@ -60,6 +75,42 @@ async def visible_user_ids(
 
     access = FamilyAccessService(session)
     return await access.visible_user_ids(user_id, family_id)
+
+
+@router.post("/{family_id}/invites", response_model=InviteOut, status_code=201)
+async def create_invite(
+    family_id: UUID,
+    body: InviteCreate,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> InviteOut:
+    service = FamilyService(session)
+    result = await service.create_invite(user_id, family_id, body)
+    await session.commit()
+    return result
+
+
+@router.get("/{family_id}/invites", response_model=list[InviteOut])
+async def list_invites(
+    family_id: UUID,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[InviteOut]:
+    service = FamilyService(session)
+    return await service.list_invites(user_id, family_id)
+
+
+@router.delete("/{family_id}/invites/{invite_id}", response_model=InviteOut)
+async def revoke_invite(
+    family_id: UUID,
+    invite_id: UUID,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> InviteOut:
+    service = FamilyService(session)
+    result = await service.revoke_invite(user_id, family_id, invite_id)
+    await session.commit()
+    return result
 
 
 @router.patch("/{family_id}/members/{member_id}/permissions", response_model=MemberOut)

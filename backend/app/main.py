@@ -8,6 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.security_middleware import (
+    SecurityHeadersMiddleware,
+    resolve_cors_origins,
+    warn_insecure_defaults,
+)
 
 settings = get_settings()
 logger = structlog.get_logger(__name__)
@@ -16,6 +21,8 @@ logger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configure_logging(debug=settings.debug)
+    for warning in warn_insecure_defaults():
+        logger.warning("berrio.security_warning", detail=warning)
     logger.info("berrio.startup", env=settings.app_env, version="0.1.0")
     yield
     logger.info("berrio.shutdown")
@@ -29,12 +36,13 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,
     )
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=resolve_cors_origins(),
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
     )
     app.include_router(api_router, prefix=settings.api_prefix)
 

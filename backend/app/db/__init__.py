@@ -11,7 +11,7 @@ from app.modules.auth.models import (
 from app.modules.banks.models import BankConnection, Transaction
 from app.modules.budgets.models import Budget
 from app.modules.categories.models import Category, CategoryRule
-from app.modules.families.models import Family, FamilyMember, FamilyPermission
+from app.modules.families.models import Family, FamilyInvite, FamilyMember, FamilyPermission
 from app.modules.financial_health.models import FinancialScore
 from app.modules.goals.models import FinancialGoal
 from app.modules.notifications.models import Notification
@@ -31,6 +31,7 @@ __all__ = [
     "CategoryRule",
     "EmailVerificationToken",
     "Family",
+    "FamilyInvite",
     "FamilyMember",
     "FamilyPermission",
     "FinancialGoal",
