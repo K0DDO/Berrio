@@ -118,12 +118,7 @@ async def seed_demo_data(session: AsyncSession) -> dict[str, object]:
     await receipts.analyze_text(
         user_id,
         AnalyzeTextRequest(
-            raw_text=(
-                "Пятёрочка\n"
-                "Молоко 1 100.00\n"
-                "Хлеб 1 150.00\n"
-                "Итого: 250.00 руб\n"
-            ),
+            raw_text=("Пятёрочка\n" "Молоко 1 100.00\n" "Хлеб 1 150.00\n" "Итого: 250.00 руб\n"),
             fn="seed-ocr-fn",
             fd="seed-ocr-fd",
             fp="seed-ocr-fp",

@@ -6,11 +6,11 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
+from tests.helpers_receipts import confirm_grocery_receipt
 
 from app.modules.banks.models import Transaction
 from app.modules.receipts.models import Receipt, ReceiptStatus
 from app.modules.reconciliation.engine import MatchDecision, ReconciliationEngine
-from tests.helpers_receipts import confirm_grocery_receipt
 
 
 @pytest.mark.asyncio

@@ -5,10 +5,10 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
+from tests.helpers_receipts import confirm_grocery_receipt
 
 from app.modules.notifications.models import NotificationSeverity, NotificationType
 from app.modules.notifications.rules import NotificationRulesEngine
-from tests.helpers_receipts import confirm_grocery_receipt
 
 
 async def _auth(client: AsyncClient, email: str) -> dict:

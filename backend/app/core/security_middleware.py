@@ -78,6 +78,8 @@ def warn_insecure_defaults() -> list[str]:
         or settings.secret_key == "change-me-in-production-use-long-random-string"
     ):
         issues.append("SECRET_KEY is still the development default")
+    if len(settings.jwt_signing_key.encode("utf-8")) < 32:
+        issues.append("JWT_SECRET/SECRET_KEY shorter than 32 bytes (InsecureKeyLengthWarning risk)")
     if not settings.email_hash_pepper or settings.email_hash_pepper.startswith(
         "berrio-email-pepper"
     ):
@@ -99,13 +101,16 @@ def assert_secure_startup() -> None:
     blockers = [
         i
         for i in warn_insecure_defaults()
-        if "SECRET_KEY" in i or "EMAIL_HASH_PEPPER" in i or "DEBUG is enabled" in i
+        if "SECRET_KEY" in i
+        or "EMAIL_HASH_PEPPER" in i
+        or "DEBUG is enabled" in i
+        or "InsecureKeyLengthWarning" in i
     ]
     if blockers:
         raise RuntimeError(
             "Insecure production configuration: "
             + "; ".join(blockers)
-            + ". Set real secrets in backend/.env.prod (see .env.prod.example)."
+            + ". Set real secrets in .env.production (see .env.production.example)."
         )
 
 

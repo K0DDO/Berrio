@@ -18,16 +18,17 @@ flutter pub get
 
 ```bash
 flutter run
-# API on host from Android emulator:
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
-# Physical device on LAN — see docs/android-build.md
-flutter run --dart-define=API_BASE_URL=http://YOUR_LAN_IP:8000
+# Prefer API_URL (VPS IP or domain). Legacy: API_BASE_URL.
+flutter run --dart-define=API_URL=http://10.0.2.2:8000
+# Physical device / VPS:
+flutter run --dart-define=API_URL=http://YOUR_SERVER_IP
 ```
 
 ## Release APK
 
 ```bash
-flutter build apk --release --dart-define=API_BASE_URL=http://YOUR_LAN_IP:8000
+flutter build apk --release --dart-define=API_URL=http://YOUR_SERVER_IP
+# Later: --dart-define=API_URL=https://api.berrio.com
 # → build/app/outputs/flutter-apk/app-release.apk
 ```
 

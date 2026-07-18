@@ -14,11 +14,7 @@ def pipeline() -> ReceiptRecognitionPipeline:
 
 
 def test_dentistry_receipt_health_and_amount(pipeline: ReceiptRecognitionPipeline) -> None:
-    text = (
-        "ООО Стоматология\n"
-        "Услуга: лечение зуба\n"
-        "Итого: 6500 руб\n"
-    )
+    text = "ООО Стоматология\n" "Услуга: лечение зуба\n" "Итого: 6500 руб\n"
     structured, validation = pipeline.analyze_text(text)
     assert structured.amount.value == Decimal("6500.00")
     assert structured.category_hint.value == "health"
@@ -43,17 +39,14 @@ def test_blurry_photo_requires_confirmation(pipeline: ReceiptRecognitionPipeline
 
 
 def test_grocery_receipt_food_category(pipeline: ReceiptRecognitionPipeline) -> None:
-    text = (
-        "Пятёрочка\n"
-        "Молоко 1 89.00\n"
-        "Хлеб 1 45.00\n"
-        "Итого: 134.00 руб\n"
-    )
+    text = "Пятёрочка\n" "Молоко 1 89.00\n" "Хлеб 1 45.00\n" "Итого: 134.00 руб\n"
     structured, _ = pipeline.analyze_text(text)
     assert structured.category_hint.value == "food"
     assert structured.amount.value == Decimal("134.00")
     assert structured.merchant.value is not None
-    assert "пятер" in structured.merchant.value.lower() or "пятёр" in structured.merchant.value.lower()
+    assert (
+        "пятер" in structured.merchant.value.lower() or "пятёр" in structured.merchant.value.lower()
+    )
 
 
 def test_unreadable_does_not_auto_succeed(pipeline: ReceiptRecognitionPipeline) -> None:
@@ -108,9 +101,7 @@ async def test_analyze_text_api_dentistry(client: AsyncClient) -> None:
         "/api/v1/receipts/analyze-text",
         headers=headers,
         json={
-            "raw_text": (
-                "ООО Стоматология\nУслуга: лечение зуба\nИтого: 6500 руб\n"
-            ),
+            "raw_text": ("ООО Стоматология\nУслуга: лечение зуба\nИтого: 6500 руб\n"),
             "persist": True,
         },
     )

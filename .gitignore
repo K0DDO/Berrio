@@ -6,6 +6,7 @@ venv/
 .env
 .env.prod
 .env.local
+.env.production
 backend/.env
 backend/.env.prod
 backend/.env.local

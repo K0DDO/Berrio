@@ -1,14 +1,26 @@
 class ApiConfig {
-  /// Override via --dart-define=API_BASE_URL=
+  /// Production / device API base (no trailing slash).
   ///
-  /// Defaults:
-  /// - Android emulator → host loopback bridge
-  /// - Physical device / iOS: pass LAN IP or https://api.domain
-  /// See docs/device-testing.md and docs/vps-deployment.md
-  static const String baseUrl = String.fromEnvironment(
+  /// Prefer `--dart-define=API_URL=...`.
+  /// Legacy alias: `--dart-define=API_BASE_URL=...` (used if API_URL is empty).
+  ///
+  /// Examples:
+  /// - Emulator: http://10.0.2.2:8000
+  /// - VPS by IP (nginx :80): http://SERVER_IP
+  /// - VPS direct API: http://SERVER_IP:8000
+  /// - Domain: https://api.berrio.com
+  static const String _apiUrl = String.fromEnvironment('API_URL');
+  static const String _apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:8000',
   );
+
+  static String get baseUrl {
+    if (_apiUrl.isNotEmpty) {
+      return _apiUrl;
+    }
+    return _apiBaseUrl;
+  }
 
   static const String apiPrefix = '/api/v1';
 

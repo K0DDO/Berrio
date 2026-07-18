@@ -1,5 +1,3 @@
-# Local network security — allow cleartext HTTP to LAN API during beta.
-# Production builds should prefer HTTPS (dart-define API_BASE_URL=https://…).
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">

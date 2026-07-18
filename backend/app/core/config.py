@@ -28,9 +28,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     secret_key: str = Field(default="dev-only-change-me-use-long-random-string")
+    jwt_secret: str | None = None
     field_encryption_key: str | None = None
     email_hash_pepper: str = Field(default="berrio-email-pepper-change-me")
     require_secure_secrets: bool = False
+    enable_api_docs: bool = False
 
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
@@ -72,6 +74,12 @@ class Settings(BaseSettings):
     def _normalize_env(cls, v: str) -> str:
         return v.strip().lower()
 
+    @property
+    def jwt_signing_key(self) -> str:
+        """Prefer JWT_SECRET; fall back to SECRET_KEY. Must be ≥32 bytes for HS256."""
+        raw = (self.jwt_secret or self.secret_key or "").strip()
+        return raw
+
     @model_validator(mode="after")
     def _reject_blank_required(self) -> Settings:
         blanks: list[str] = []
@@ -87,6 +95,14 @@ class Settings(BaseSettings):
                 + ", ".join(blanks)
                 + ". Copy backend/.env.local.example → backend/.env.local and fill them in. "
                 "See docs/local-development.md."
+            )
+        key = self.jwt_signing_key
+        key_len = len(key.encode("utf-8"))
+        if key_len < 32 and (self.require_secure_secrets or self.app_env == "production"):
+            raise ValueError(
+                "JWT_SECRET (or SECRET_KEY) must be at least 32 bytes to avoid "
+                "InsecureKeyLengthWarning. Generate with: "
+                'python3 -c "import secrets; print(secrets.token_urlsafe(48))"'
             )
         return self
 

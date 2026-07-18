@@ -2,7 +2,6 @@ from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
-
 from tests.helpers_receipts import confirm_grocery_receipt
 
 

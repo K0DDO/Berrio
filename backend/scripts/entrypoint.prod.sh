@@ -30,5 +30,14 @@ echo "Running migrations..."
 alembic upgrade head
 echo "Migrations complete."
 
-echo "Starting API (production)..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+WORKERS="${WEB_CONCURRENCY:-2}"
+echo "Starting API (gunicorn + uvicorn workers=${WORKERS})..."
+exec gunicorn app.main:app \
+  --worker-class uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:8000 \
+  --workers "${WORKERS}" \
+  --proxy-headers \
+  --forwarded-allow-ips='*' \
+  --access-logfile - \
+  --error-logfile - \
+  --timeout 120

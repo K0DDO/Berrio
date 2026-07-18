@@ -1,0 +1,116 @@
+# Berrio production stack (VPS / IP access, host nginx optional)
+#
+#   cp .env.production.example .env.production   # fill secrets
+#   docker compose -f docker-compose.production.yml --env-file .env.production up -d --build
+#
+# API published on host port 8000 (first smoke tests).
+# After nginx is on :80, set API_BIND=127.0.0.1 so only localhost can reach :8000.
+# Postgres and Redis stay on the internal network (not published).
+
+name: berrio
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-berrio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-berrio}
+    volumes:
+      - berrio_pg_data:/var/lib/postgresql/data
+      - berrio_pg_backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-berrio} -d ${POSTGRES_DB:-berrio}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - berrio_net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - berrio_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - berrio_net
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    image: berrio-api:latest
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      REQUIRE_SECURE_SECRETS: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-berrio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-berrio}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-berrio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-berrio}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      # Host port (change if 8000 busy). Prefer 127.0.0.1 on shared VPS.
+      - "${API_BIND:-127.0.0.1}:${API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - berrio_net
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    image: berrio-api:latest
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      REQUIRE_SECURE_SECRETS: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-berrio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-berrio}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-berrio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-berrio}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO"]
+    networks:
+      - berrio_net
+
+volumes:
+  berrio_pg_data:
+  berrio_redis_data:
+  berrio_pg_backups:
+
+networks:
+  berrio_net:
+    driver: bridge

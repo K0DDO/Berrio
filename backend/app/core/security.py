@@ -103,14 +103,14 @@ def create_access_token(*, user_id: UUID, extra: dict[str, Any] | None = None) -
     }
     if extra:
         payload.update(extra)
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.jwt_signing_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     settings = get_settings()
     return jwt.decode(
         token,
-        settings.secret_key,
+        settings.jwt_signing_key,
         algorithms=[settings.jwt_algorithm],
         options={"require": ["exp", "sub", "type"]},
     )
