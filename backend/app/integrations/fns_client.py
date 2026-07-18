@@ -49,6 +49,7 @@ class FnsClient:
         fp: str,
         purchased_at: datetime | None = None,
         total_amount: Decimal | None = None,
+        qrraw: str | None = None,
     ) -> FnsReceiptData:
         raise NotImplementedError
 
@@ -70,6 +71,7 @@ class StubFnsClient(FnsClient):
         fp: str,
         purchased_at: datetime | None = None,
         total_amount: Decimal | None = None,
+        qrraw: str | None = None,
     ) -> FnsReceiptData:
         when = purchased_at or datetime.now(UTC)
         logger.warning(
@@ -120,17 +122,20 @@ class ProverkaChekaFnsClient(FnsClient):
         fp: str,
         purchased_at: datetime | None = None,
         total_amount: Decimal | None = None,
+        qrraw: str | None = None,
     ) -> FnsReceiptData:
-        qrraw = self._build_qrraw(
+        built = self._build_qrraw(
             fn=fn, fd=fd, fp=fp, purchased_at=purchased_at, total_amount=total_amount
         )
+        qr_payload = (qrraw or "").strip() or built
         form = {
             "token": self._token,
             "fn": fn,
             "fd": fd,
             "fp": fp,
             "n": "1",
-            "qr": "0",
+            "qr": "1" if qrraw else "0",
+            "qrraw": qr_payload,
         }
         if total_amount is not None:
             form["s"] = f"{total_amount:.2f}"
@@ -138,14 +143,25 @@ class ProverkaChekaFnsClient(FnsClient):
             form["t"] = purchased_at.strftime("%Y%m%dT%H%M")
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.post(self._url, data={**form, "qrraw": qrraw})
+            response = await client.post(self._url, data=form)
             response.raise_for_status()
             body: dict[str, Any] = response.json()
 
         logger.info("fns.fetch", code=body.get("code"), fn=fn, fd=fd)
         if body.get("code") not in (1, "1", True):
             detail = body.get("data") or body.get("message") or body
-            raise RuntimeError(f"FNS provider rejected receipt: {detail}")
+            logger.warning("fns.provider_rejected", detail=str(detail)[:300], fn=fn, fd=fd)
+            when = purchased_at or datetime.now(UTC)
+            return FnsReceiptData(
+                store_name=None,
+                store_inn=None,
+                purchased_at=when,
+                total_amount=total_amount,
+                items=[],
+                incomplete=True,
+                incomplete_reason=f"ОФД отклонил запрос: {detail}",
+                source_confidence=0.2 if total_amount is None else 0.4,
+            )
 
         raw = body.get("data") or {}
         ticket = raw.get("json") if isinstance(raw, dict) else None

@@ -23,6 +23,7 @@ class ReceiptScanRequest(BaseModel):
     fp: str = Field(min_length=1, max_length=64)
     purchased_at: datetime | None = None
     total_amount: Decimal | None = None
+    qrraw: str | None = Field(default=None, max_length=512)
     idempotency_key: str | None = Field(default=None, max_length=128)
 
 

@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database_providers.dart';
+import '../../core/network/api_config.dart';
 import '../notifications/data/notifications_api.dart';
 import '../receipts/data/local_receipts_dao.dart';
 import '../receipts/data/receipts_api.dart';
@@ -17,8 +18,17 @@ export '../../core/database/database_providers.dart' show appDatabaseProvider;
 abstract class SyncEngine {
   Future<void> enqueueReceiptScan(Map<String, dynamic> qrPayload);
   Future<void> enqueueNotificationRead(String notificationId);
-  Future<int> drainPending();
+  Future<DrainResult> drainPending();
   Future<void> syncWhenOnline();
+}
+
+class DrainResult {
+  const DrainResult({required this.done, this.lastError});
+
+  final int done;
+  final String? lastError;
+
+  bool get hasFailures => lastError != null && done == 0;
 }
 
 /// Offline-first pipeline:
@@ -68,9 +78,10 @@ class ReceiptSyncEngine implements SyncEngine {
   }
 
   @override
-  Future<int> drainPending() async {
+  Future<DrainResult> drainPending() async {
     final pending = await _queue.pending();
     var done = 0;
+    String? lastError;
     for (final job in pending) {
       await _queue.markStatus(job.id, SyncJobStatus.syncing);
       try {
@@ -93,22 +104,48 @@ class ReceiptSyncEngine implements SyncEngine {
         await _queue.markStatus(job.id, SyncJobStatus.done);
         done++;
       } on DioException catch (e) {
+        lastError = _formatDioError(e);
         await _queue.markStatus(
           job.id,
           SyncJobStatus.failed,
-          lastError: e.message,
+          lastError: lastError,
           retryCount: job.retryCount + 1,
         );
       } catch (e) {
+        lastError = e.toString();
         await _queue.markStatus(
           job.id,
           SyncJobStatus.failed,
-          lastError: e.toString(),
+          lastError: lastError,
           retryCount: job.retryCount + 1,
         );
       }
     }
-    return done;
+    return DrainResult(done: done, lastError: lastError);
+  }
+
+  static String _formatDioError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'Server timed out (${ApiConfig.baseUrl}). Check VPN/firewall.';
+      case DioExceptionType.connectionError:
+        return 'Cannot reach API at ${ApiConfig.baseUrl}. Is port 8000 open?';
+      case DioExceptionType.badResponse:
+        final code = e.response?.statusCode;
+        if (code == 401) return 'Not logged in (401). Sign in again.';
+        final detail = e.response?.data;
+        if (detail is Map && detail['detail'] != null) {
+          return 'HTTP $code: ${detail['detail']}';
+        }
+        if (code == 502) {
+          return 'HTTP 502: OFD/FNS lookup failed on server (API itself is up).';
+        }
+        return 'Server error HTTP $code';
+      default:
+        return e.message ?? e.toString();
+    }
   }
 
   @override

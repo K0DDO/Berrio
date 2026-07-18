@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+import structlog
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +41,8 @@ from app.modules.receipts.recognition.validator import (
 from app.modules.receipts.repository import ReceiptRepository
 from app.modules.receipts.schemas import ReceiptItemOut, ReceiptOut, ReceiptScanRequest
 
+logger = structlog.get_logger(__name__)
+
 
 class ReceiptService:
     def __init__(
@@ -64,7 +67,18 @@ class ReceiptService:
             user_id=user_id, fn=data.fn, fd=data.fd, fp=data.fp
         )
         if existing is not None:
-            return await self._to_out(existing)
+            if existing.status == ReceiptStatus.DONE:
+                return await self._to_out(existing)
+            # Re-fetch OFD for failed / incomplete receipts (QR date/sum may be fixed).
+            if data.purchased_at is not None:
+                existing.purchased_at = data.purchased_at
+            if data.total_amount is not None:
+                existing.total_amount = data.total_amount
+            existing.status = ReceiptStatus.PENDING
+            existing.error_message = None
+            await self._repo.save(existing)
+            await self._session.commit()
+            return await self.process_receipt(existing.id, user_id, qrraw=data.qrraw)
 
         receipt = await self._repo.create_pending(
             user_id=user_id,
@@ -84,12 +98,18 @@ class ReceiptService:
         await self._bus.publish(ReceiptCreatedEvent.build(receipt_id=receipt.id, user_id=user_id))
         await self._session.commit()
 
-        await self.process_receipt(receipt.id, user_id)
+        await self.process_receipt(receipt.id, user_id, qrraw=data.qrraw)
         refreshed = await self._repo.get_by_id(receipt.id, user_id)
         assert refreshed is not None
         return await self._to_out(refreshed)
 
-    async def process_receipt(self, receipt_id: UUID, user_id: UUID) -> ReceiptOut:
+    async def process_receipt(
+        self,
+        receipt_id: UUID,
+        user_id: UUID,
+        *,
+        qrraw: str | None = None,
+    ) -> ReceiptOut:
         receipt = await self._repo.get_by_id(receipt_id, user_id)
         if receipt is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Receipt not found")
@@ -107,6 +127,7 @@ class ReceiptService:
                 fp=receipt.fp,
                 purchased_at=receipt.purchased_at,
                 total_amount=receipt.total_amount,
+                qrraw=qrraw,
             )
             structured = self._structured_from_fns(data)
             validation = validate_structured(structured)
@@ -201,14 +222,15 @@ class ReceiptService:
 
             await self._repo.save(receipt)
             await self._session.commit()
-        except Exception as exc:  # noqa: BLE001 — convert to failed status
-            receipt.status = ReceiptStatus.FAILED
-            receipt.error_message = str(exc)[:500]
+        except Exception as exc:  # noqa: BLE001 — keep receipt, do not 502 the client
+            # QR is already saved; OFD/FNS failure must not break mobile sync.
+            logger.warning("receipt.fns_fetch_failed", receipt_id=str(receipt_id), error=str(exc))
+            receipt.status = ReceiptStatus.NEEDS_CONFIRMATION
+            receipt.error_message = (
+                f"ОФД/ФНС недоступны: {exc}. Чек сохранён — подтвердите вручную или повторите позже."
+            )[:500]
             await self._repo.save(receipt)
             await self._session.commit()
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, detail="Failed to fetch receipt from FNS"
-            ) from exc
 
         refreshed = await self._repo.get_by_id(receipt_id, user_id)
         assert refreshed is not None

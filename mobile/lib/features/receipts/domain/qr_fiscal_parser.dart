@@ -27,12 +27,33 @@ class QrFiscalParser {
     final fp = params['fp'];
     if (fn == null || fd == null || fp == null) return null;
 
+    final purchasedAt = _parseFiscalTime(params['t']);
+
     return {
       'fn': fn,
       'fd': fd,
       'fp': fp,
+      'qrraw': query,
       if (params['s'] != null) 'total_amount': params['s'],
-      if (params['t'] != null) 'purchased_at_raw': params['t'],
+      if (purchasedAt != null) 'purchased_at': purchasedAt.toIso8601String(),
     };
+  }
+
+  /// FNS QR `t` is usually `YYYYMMDDTHHMM` or `YYYYMMDDTHHMMSS`.
+  static DateTime? _parseFiscalTime(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final t = raw.trim();
+    final match = RegExp(r'^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?$').firstMatch(t);
+    if (match != null) {
+      return DateTime(
+        int.parse(match.group(1)!),
+        int.parse(match.group(2)!),
+        int.parse(match.group(3)!),
+        int.parse(match.group(4)!),
+        int.parse(match.group(5)!),
+        int.parse(match.group(6) ?? '0'),
+      );
+    }
+    return DateTime.tryParse(t);
   }
 }

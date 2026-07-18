@@ -103,6 +103,7 @@ class ReceiptsApi {
         'fp': payload['fp'],
         if (payload['total_amount'] != null) 'total_amount': payload['total_amount'],
         if (payload['purchased_at'] != null) 'purchased_at': payload['purchased_at'],
+        if (payload['qrraw'] != null) 'qrraw': payload['qrraw'],
         if (payload['idempotency_key'] != null)
           'idempotency_key': payload['idempotency_key'],
       },

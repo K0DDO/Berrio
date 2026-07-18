@@ -13,6 +13,9 @@ void main() {
     expect(result['fd'], '12345');
     expect(result['fp'], '987654321');
     expect(result['total_amount'], '250.00');
+    expect(result['purchased_at'], isNotNull);
+    expect(result['purchased_at'], contains('2024-01-15'));
+    expect(result['qrraw'], contains('fn=9281000100123456'));
   });
 
   test('rejects incomplete payload', () {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,36 +20,125 @@ class ScanReceiptScreen extends ConsumerStatefulWidget {
   ConsumerState<ScanReceiptScreen> createState() => _ScanReceiptScreenState();
 }
 
-class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen> {
+class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
+    with WidgetsBindingObserver {
   final _parser = const QrFiscalParser();
-  final _controller = MobileScannerController();
+  MobileScannerController? _controller;
   var _phase = ScanPhase.idle;
   String? _message;
   String? _receiptId;
   var _handled = false;
+  var _starting = false;
 
   @override
   void initState() {
     super.initState();
-    _initCamera();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initCamera());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final controller = _controller;
+    if (controller == null || !controller.value.hasCameraPermission) return;
+    if (_phase != ScanPhase.scanning) return;
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(controller.stop());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(_safeStart());
+    }
+  }
+
+  Future<void> _safeStart() async {
+    final controller = _controller;
+    if (controller == null || _starting || !mounted) return;
+    if (_phase != ScanPhase.scanning) return;
+    _starting = true;
+    try {
+      await controller.start();
+    } on MobileScannerException catch (e) {
+      if (!mounted) return;
+      // Already running / transient — ignore; real failures show via errorBuilder.
+      if (e.errorCode == MobileScannerErrorCode.controllerAlreadyInitialized ||
+          e.errorCode == MobileScannerErrorCode.controllerInitializing) {
+        return;
+      }
+      setState(() {
+        _phase = ScanPhase.error;
+        _message = e.errorDetails?.message ?? e.errorCode.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phase = ScanPhase.error;
+        _message = e.toString();
+      });
+    } finally {
+      _starting = false;
+    }
   }
 
   Future<void> _initCamera() async {
-    final status = await Permission.camera.request();
+    var status = await Permission.camera.status;
+    if (!status.isGranted) {
+      status = await Permission.camera.request();
+    }
     if (!mounted) return;
-    setState(() {
-      if (status.isGranted) {
-        _phase = ScanPhase.scanning;
-      } else {
+
+    if (!status.isGranted) {
+      setState(() {
         _phase = ScanPhase.permission;
-        _message = 'Camera permission is required to scan fiscal QR codes.';
-      }
+        _message = status.isPermanentlyDenied
+            ? 'Camera access is blocked. Enable it in system settings.'
+            : 'Camera permission is required to scan fiscal QR codes.';
+      });
+      return;
+    }
+
+    await _disposeController();
+    final controller = MobileScannerController(
+      autoStart: false,
+      facing: CameraFacing.back,
+      detectionSpeed: DetectionSpeed.normal,
+      formats: const [BarcodeFormat.qrCode],
+    );
+    if (!mounted) {
+      await controller.dispose();
+      return;
+    }
+
+    setState(() {
+      _controller = controller;
+      _phase = ScanPhase.scanning;
+      _message = null;
+      _handled = false;
     });
+
+    // Let the MobileScanner widget mount before starting CameraX.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted || _controller != controller) return;
+    await _safeStart();
+  }
+
+  Future<void> _disposeController() async {
+    final old = _controller;
+    _controller = null;
+    if (old == null) return;
+    try {
+      await old.stop();
+    } catch (_) {}
+    await old.dispose();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    final c = _controller;
+    _controller = null;
+    c?.dispose();
     super.dispose();
   }
 
@@ -63,6 +154,10 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen> {
       return;
     }
 
+    try {
+      await _controller?.stop();
+    } catch (_) {}
+
     setState(() {
       _phase = ScanPhase.processing;
       _message = 'Saving locally and talking to Berrio…';
@@ -72,9 +167,9 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen> {
       final engine = ref.read(syncEngineProvider);
       await engine.enqueueReceiptScan(parsed);
       if (syncNow) {
-        final n = await engine.drainPending();
+        final result = await engine.drainPending();
         if (!mounted) return;
-        if (n > 0) {
+        if (result.done > 0) {
           final locals = await ref.read(localReceiptsDaoProvider).listAll();
           final match = locals.where(
             (r) =>
@@ -88,6 +183,12 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen> {
             _phase = ScanPhase.success;
             _receiptId = match.isEmpty ? null : match.first.id;
             _message = 'Receipt loaded. Categories assigned — dashboard updated.';
+          });
+        } else if (result.lastError != null) {
+          setState(() {
+            _phase = ScanPhase.error;
+            _message = result.lastError;
+            _handled = false;
           });
         } else {
           setState(() {
@@ -112,18 +213,18 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen> {
     }
   }
 
-  void _resetToScan() {
-    setState(() {
-      _phase = ScanPhase.scanning;
-      _message = null;
-      _receiptId = null;
-      _handled = false;
-    });
+  Future<void> _resetToScan() async {
+    _handled = false;
+    _receiptId = null;
+    _message = null;
+    setState(() => _phase = ScanPhase.idle);
+    await _initCamera();
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final controller = _controller;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Scan receipt'),
@@ -169,29 +270,53 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen> {
                   onRetry: _resetToScan,
                 ),
               ScanPhase.offline => JourneyStatePanel.offline(
+                  message: _message,
                   onRetry: () async {
                     setState(() => _phase = ScanPhase.processing);
-                    final n = await ref.read(syncEngineProvider).drainPending();
+                    final result =
+                        await ref.read(syncEngineProvider).drainPending();
                     refreshMoneySurfaces(ref);
                     if (!mounted) return;
-                    setState(() {
-                      _phase = n > 0 ? ScanPhase.success : ScanPhase.offline;
-                      _message = n > 0
-                          ? 'Synced $n receipt(s).'
-                          : 'Still offline or nothing to sync.';
-                    });
+                    if (result.done > 0) {
+                      setState(() {
+                        _phase = ScanPhase.success;
+                        _message = 'Synced ${result.done} receipt(s).';
+                      });
+                    } else if (result.lastError != null) {
+                      setState(() {
+                        _phase = ScanPhase.error;
+                        _message = result.lastError;
+                      });
+                    } else {
+                      setState(() {
+                        _phase = ScanPhase.offline;
+                        _message =
+                            'Nothing to sync. Check Wi‑Fi/mobile data, then scan again.';
+                      });
+                    }
                   },
                 ),
-              _ => MobileScanner(
-                  controller: _controller,
-                  onDetect: (capture) {
-                    if (_handled || _phase != ScanPhase.scanning) return;
-                    final raw = capture.barcodes.firstOrNull?.rawValue;
-                    if (raw == null) return;
-                    _handled = true;
-                    _handleRaw(raw, syncNow: true);
-                  },
-                ),
+              ScanPhase.idle => const Center(child: CircularProgressIndicator()),
+              ScanPhase.scanning => controller == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : MobileScanner(
+                      controller: controller,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error) {
+                        return JourneyStatePanel.error(
+                          message:
+                              'Camera error: ${error.errorDetails?.message ?? error.errorCode.name}',
+                          onRetry: _resetToScan,
+                        );
+                      },
+                      onDetect: (capture) {
+                        if (_handled || _phase != ScanPhase.scanning) return;
+                        final raw = capture.barcodes.firstOrNull?.rawValue;
+                        if (raw == null || raw.isEmpty) return;
+                        _handled = true;
+                        _handleRaw(raw, syncNow: true);
+                      },
+                    ),
             },
           ),
           Expanded(
@@ -210,19 +335,20 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen> {
                   if (_message != null &&
                       _phase != ScanPhase.success &&
                       _phase != ScanPhase.error &&
-                      _phase != ScanPhase.offline) ...[
+                      _phase != ScanPhase.offline &&
+                      _phase != ScanPhase.permission) ...[
                     const SizedBox(height: 8),
                     Text(_message!),
                   ],
                   const Spacer(),
-                  if (_phase == ScanPhase.scanning || _phase == ScanPhase.idle) ...[
+                  if (_phase == ScanPhase.scanning) ...[
                     FilledButton.tonalIcon(
                       onPressed: () => _handleRaw(
                         't=20240115T1200&s=250.00&fn=9281000100123456&i=12345&fp=987654321&n=1',
                         syncNow: false,
                       ),
                       icon: const Icon(Icons.cloud_off),
-                      label: const Text('Simulate offline scan'),
+                      label: const Text('Save without sync (test)'),
                     ),
                   ],
                   if (_phase == ScanPhase.success) ...[

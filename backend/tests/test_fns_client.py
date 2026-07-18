@@ -68,6 +68,26 @@ async def test_proverkacheka_parses_json_payload() -> None:
     mock_client.post.assert_awaited()
 
 
+@pytest.mark.asyncio
+async def test_proverkacheka_rejection_returns_incomplete() -> None:
+    client = ProverkaChekaFnsClient(token="test-token")
+    fake_response = MagicMock()
+    fake_response.raise_for_status = MagicMock()
+    fake_response.json.return_value = {"code": 0, "data": "чек не найден"}
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = None
+    mock_client.post = AsyncMock(return_value=fake_response)
+
+    with patch("app.integrations.fns_client.httpx.AsyncClient", return_value=mock_client):
+        data = await client.fetch(fn="1", fd="2", fp="3", total_amount=Decimal("10.00"))
+
+    assert data.incomplete is True
+    assert data.items == []
+    assert "ОФД отклонил" in (data.incomplete_reason or "")
+
+
 def test_factory_uses_stub_without_token(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import get_settings
 

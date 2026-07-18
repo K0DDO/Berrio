@@ -45,11 +45,15 @@ class JourneyStatePanel extends StatelessWidget {
     );
   }
 
-  factory JourneyStatePanel.offline({VoidCallback? onRetry}) {
+  factory JourneyStatePanel.offline({
+    String? message,
+    VoidCallback? onRetry,
+  }) {
     return JourneyStatePanel(
       icon: Icons.cloud_off_outlined,
       title: 'You are offline',
-      message: 'Changes are saved locally and will sync when you are back online.',
+      message: message ??
+          'Changes are saved locally and will sync when you are back online.',
       actionLabel: onRetry == null ? null : 'Try sync',
       onAction: onRetry,
     );

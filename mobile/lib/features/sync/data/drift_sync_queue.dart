@@ -21,7 +21,24 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
           .get();
       final open = existing.where((e) => e.status != SyncStatus.done);
       if (open.isNotEmpty) {
-        return _map(open.first);
+        final row = open.first;
+        // Re-scan / retry: pull failed or stuck jobs back into the queue.
+        if (row.status != SyncStatus.pending) {
+          await (_db.update(_db.syncQueueItems)
+                ..where((t) => t.id.equals(row.id)))
+              .write(
+            const SyncQueueItemsCompanion(
+              status: Value(SyncStatus.pending),
+              retryCount: Value(0),
+              lastError: Value(null),
+            ),
+          );
+          final refreshed = await (_db.select(_db.syncQueueItems)
+                ..where((t) => t.id.equals(row.id)))
+              .getSingle();
+          return _map(refreshed);
+        }
+        return _map(row);
       }
     }
 
@@ -41,11 +58,12 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
 
   @override
   Future<List<SyncJob>> pending({int limit = 50}) async {
-    // Include failed jobs with retries left so background sync can recover.
+    // pending + stuck syncing + failed with retries left.
     final rows = await (_db.select(_db.syncQueueItems)
           ..where(
             (t) =>
                 t.status.equalsValue(SyncStatus.pending) |
+                t.status.equalsValue(SyncStatus.syncing) |
                 (t.status.equalsValue(SyncStatus.failed) &
                     t.retryCount.isSmallerThanValue(5)),
           )
