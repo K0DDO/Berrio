@@ -18,8 +18,12 @@ Scope: auth, family invites, API surface, mobile offline sync.
 | Receipt photos | OK | Never accepted/stored |
 | AI rate limit | OK | 60/hour/user |
 | Invite rate limit | OK | 20/hour/user |
-| Default secrets | WARN | Startup logs if `SECRET_KEY` / pepper still defaults |
-| Global API rate limit | TODO | Edge / reverse-proxy recommended |
+| Default secrets | WARN | Startup logs; `require_secure_secrets` / production fails hard |
+| API rate limit | OK | Per-IP sliding window (`API_RATE_LIMIT_PER_MINUTE`) |
+| AI insight feedback | OK | HELPFUL / NOT_HELPFUL with upsert |
+| DB indexes (beta) | OK | Migration `0014_beta_hardening` |
+| Backups | OK | `scripts/backup_postgres.sh` + restore |
+| Global edge rate limit | TODO | Prefer reverse-proxy for multi-instance |
 | WAF / bot protection | TODO | Deploy-time |
 | Push notification auth | TODO | Channel interfaces only |
 | Penetration test | TODO | Before public beta |
@@ -40,8 +44,9 @@ Scope: auth, family invites, API surface, mobile offline sync.
 - [ ] Explicit `CORS_ORIGINS` (no `*`)
 - [ ] TLS termination + HSTS at edge
 - [ ] Rotate JWT secrets with dual-key plan when needed
-- [ ] Run Alembic through `0013_family_invites`
+- [ ] Run Alembic through `0014_beta_hardening`
 - [ ] Restrict DB network; least-privilege DB user
+- [ ] Schedule `backup_postgres.sh` (see `docs/production-checklist.md`)
 
 ## Residual risks
 

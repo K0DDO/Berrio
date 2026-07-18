@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.integrations.ai_client import AiClient, get_ai_client
-from app.modules.ai.models import AiInsight
+from app.modules.ai.models import AiFeedbackType, AiInsight, AiInsightFeedback
 from app.modules.analytics.service import AnalyticsService
 
 # Process-local chat cache + simple rate limit (per user)
@@ -39,9 +39,22 @@ class AiChatResponse(BaseModel):
 
 
 class AiInsightOut(BaseModel):
+    id: UUID | None = None
     title: str
     body: str
     kind: str
+
+
+class AiFeedbackRequest(BaseModel):
+    feedback_type: AiFeedbackType
+    rating: int = Field(default=0, ge=-1, le=1)
+
+
+class AiFeedbackOut(BaseModel):
+    id: UUID
+    insight_id: UUID
+    feedback_type: str
+    rating: int
 
 
 SYSTEM_PROMPT = (
@@ -106,19 +119,18 @@ class AiService:
             if created >= cutoff:
                 fresh.append(r)
         if fresh:
-            return [AiInsightOut(title=r.title, body=r.body, kind=r.kind) for r in fresh]
+            return [AiInsightOut(id=r.id, title=r.title, body=r.body, kind=r.kind) for r in fresh]
 
         summary = await self._analytics.summary(user_id, period=period)
-        insights: list[AiInsightOut] = []
+        drafts: list[AiInsightOut] = []
         if summary.total_spend > 0 and summary.by_category:
             lines = []
             for cat in summary.by_category[:5]:
                 lines.append(f"{cat.category_name} {cat.share:.0%}")
             cats_block = "\n".join(lines)
-            # Rough tip: 10% of top category if share high
             tip_amount = (summary.by_category[0].amount * Decimal("0.1")).quantize(Decimal("1"))
             tip_name = summary.by_category[0].category_name.lower()
-            insights.append(
+            drafts.append(
                 AiInsightOut(
                     title="Первый разбор трат",
                     body=(
@@ -130,9 +142,9 @@ class AiService:
                     kind="first_insight",
                 )
             )
-        if summary.by_category and not any(i.kind == "first_insight" for i in insights):
+        if summary.by_category and not any(i.kind == "first_insight" for i in drafts):
             top = summary.by_category[0]
-            insights.append(
+            drafts.append(
                 AiInsightOut(
                     title="Главная категория расходов",
                     body=f"{top.category_name} — {top.amount} ₽ ({top.share:.0%} за период).",
@@ -140,15 +152,15 @@ class AiService:
                 )
             )
         if summary.berrio_score is not None:
-            insights.append(
+            drafts.append(
                 AiInsightOut(
                     title="Berrio Score",
                     body=f"Оценка финансового здоровья: {summary.berrio_score}/100.",
                     kind="health",
                 )
             )
-        if not insights:
-            insights.append(
+        if not drafts:
+            drafts.append(
                 AiInsightOut(
                     title="Начните со скана чека",
                     body="Пока мало данных. Отсканируйте QR чека — аналитика появится автоматически.",
@@ -156,22 +168,67 @@ class AiService:
                 )
             )
 
-        for item in insights:
-            self._session.add(
-                AiInsight(
-                    user_id=user_id,
-                    period=period,
-                    kind=item.kind,
-                    title=item.title,
-                    body=item.body,
-                    payload_json=json.dumps(
-                        {"total_spend": str(summary.total_spend), "score": summary.berrio_score},
-                        ensure_ascii=False,
-                    ),
-                )
+        out: list[AiInsightOut] = []
+        for item in drafts:
+            row = AiInsight(
+                user_id=user_id,
+                period=period,
+                kind=item.kind,
+                title=item.title,
+                body=item.body,
+                payload_json=json.dumps(
+                    {"total_spend": str(summary.total_spend), "score": summary.berrio_score},
+                    ensure_ascii=False,
+                ),
             )
+            self._session.add(row)
+            await self._session.flush()
+            out.append(
+                AiInsightOut(id=row.id, title=row.title, body=row.body, kind=row.kind)
+            )
+        return out
+
+    async def submit_feedback(
+        self,
+        user_id: UUID,
+        insight_id: UUID,
+        body: AiFeedbackRequest,
+    ) -> AiFeedbackOut:
+        insight = await self._session.get(AiInsight, insight_id)
+        if insight is None or insight.user_id != user_id:
+            from fastapi import HTTPException, status
+
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Insight not found")
+
+        rating = body.rating
+        if rating == 0:
+            rating = 1 if body.feedback_type == AiFeedbackType.HELPFUL else -1
+
+        result = await self._session.execute(
+            select(AiInsightFeedback).where(
+                AiInsightFeedback.insight_id == insight_id,
+                AiInsightFeedback.user_id == user_id,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            row = AiInsightFeedback(
+                insight_id=insight_id,
+                user_id=user_id,
+                feedback_type=body.feedback_type.value,
+                rating=rating,
+            )
+            self._session.add(row)
+        else:
+            row.feedback_type = body.feedback_type.value
+            row.rating = rating
         await self._session.flush()
-        return insights
+        return AiFeedbackOut(
+            id=row.id,
+            insight_id=row.insight_id,
+            feedback_type=row.feedback_type,
+            rating=row.rating,
+        )
 
     @staticmethod
     def _build_context(summary) -> str:

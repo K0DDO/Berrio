@@ -4,9 +4,10 @@ import sys
 import structlog
 
 
-def configure_logging(*, debug: bool = False) -> None:
-    level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level)
+def configure_logging(*, debug: bool = False, level: str | None = None) -> None:
+    resolved = (level or ("DEBUG" if debug else "INFO")).upper()
+    log_level = getattr(logging, resolved, logging.INFO)
+    logging.basicConfig(format="%(message)s", stream=sys.stdout, level=log_level)
 
     structlog.configure(
         processors=[
@@ -16,7 +17,7 @@ def configure_logging(*, debug: bool = False) -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.dev.ConsoleRenderer() if debug else structlog.processors.JSONRenderer(),
         ],
-        wrapper_class=structlog.make_filtering_bound_logger(level),
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,

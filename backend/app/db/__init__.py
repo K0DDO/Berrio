@@ -1,7 +1,7 @@
 """Import all ORM models here so Alembic sees them."""
 
 from app.db.base import Base
-from app.modules.ai.models import AiInsight
+from app.modules.ai.models import AiInsight, AiInsightFeedback
 from app.modules.auth.models import (
     AuditLog,
     EmailVerificationToken,
@@ -23,6 +23,7 @@ from app.modules.users.models import User
 
 __all__ = [
     "AiInsight",
+    "AiInsightFeedback",
     "AuditLog",
     "BankConnection",
     "Base",

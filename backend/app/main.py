@@ -9,7 +9,9 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.security_middleware import (
+    ApiRateLimitMiddleware,
     SecurityHeadersMiddleware,
+    assert_secure_startup,
     resolve_cors_origins,
     warn_insecure_defaults,
 )
@@ -20,7 +22,8 @@ logger = structlog.get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    configure_logging(debug=settings.debug)
+    configure_logging(debug=settings.debug, level=settings.log_level)
+    assert_secure_startup()
     for warning in warn_insecure_defaults():
         logger.warning("berrio.security_warning", detail=warning)
     logger.info("berrio.startup", env=settings.app_env, version="0.1.0")
@@ -37,6 +40,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(ApiRateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=resolve_cors_origins(),

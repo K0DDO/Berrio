@@ -5,7 +5,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
-from app.modules.ai.service import AiChatRequest, AiChatResponse, AiInsightOut, AiService
+from app.modules.ai.service import (
+    AiChatRequest,
+    AiChatResponse,
+    AiFeedbackOut,
+    AiFeedbackRequest,
+    AiInsightOut,
+    AiService,
+)
 from app.modules.auth.dependencies import get_current_user_id
 from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
 
@@ -46,5 +53,18 @@ async def ai_insights(
     )
     service = AiService(session)
     result = await service.insights(user_id, period=period)
+    await session.commit()
+    return result
+
+
+@router.post("/insights/{insight_id}/feedback", response_model=AiFeedbackOut)
+async def ai_insight_feedback(
+    insight_id: UUID,
+    body: AiFeedbackRequest,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AiFeedbackOut:
+    service = AiService(session)
+    result = await service.submit_feedback(user_id, insight_id, body)
     await session.commit()
     return result

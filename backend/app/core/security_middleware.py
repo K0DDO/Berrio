@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import time
+from collections import defaultdict
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.core.config import get_settings
+
+_IP_HITS: dict[str, list[float]] = defaultdict(list)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -31,6 +36,29 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class ApiRateLimitMiddleware(BaseHTTPMiddleware):
+    """Simple per-IP sliding window (in-process). Prefer edge limits in multi-instance."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        settings = get_settings()
+        limit = settings.api_rate_limit_per_minute
+        if limit <= 0 or request.url.path in {"/health", "/docs", "/openapi.json"}:
+            return await call_next(request)
+
+        client = request.client.host if request.client else "unknown"
+        now = time.time()
+        window = [t for t in _IP_HITS[client] if now - t < 60]
+        if len(window) >= limit:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests"},
+                headers={"Retry-After": "60"},
+            )
+        window.append(now)
+        _IP_HITS[client] = window
+        return await call_next(request)
+
+
 def resolve_cors_origins() -> list[str]:
     """Never allow wildcard CORS outside debug."""
     settings = get_settings()
@@ -48,8 +76,24 @@ def warn_insecure_defaults() -> list[str]:
         issues.append("SECRET_KEY is still the development default")
     if settings.email_hash_pepper.startswith("berrio-email-pepper"):
         issues.append("EMAIL_HASH_PEPPER is still the development default")
+    if not settings.field_encryption_key and settings.app_env == "production":
+        issues.append("FIELD_ENCRYPTION_KEY is unset in production")
     if not settings.debug and "*" in settings.cors_origins:
         issues.append("CORS wildcard is configured while debug=False")
     if settings.app_env == "production" and settings.debug:
         issues.append("DEBUG is enabled in production environment")
     return issues
+
+
+def assert_secure_startup() -> None:
+    """Raise if production demands secure secrets and defaults remain."""
+    settings = get_settings()
+    if not (settings.require_secure_secrets or settings.app_env == "production"):
+        return
+    blockers = [
+        i
+        for i in warn_insecure_defaults()
+        if "SECRET_KEY" in i or "EMAIL_HASH_PEPPER" in i or "DEBUG is enabled" in i
+    ]
+    if blockers:
+        raise RuntimeError("Insecure production configuration: " + "; ".join(blockers))
