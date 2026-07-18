@@ -36,7 +36,6 @@ exec gunicorn app.main:app \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000 \
   --workers "${WORKERS}" \
-  --proxy-headers \
   --forwarded-allow-ips='*' \
   --access-logfile - \
   --error-logfile - \
