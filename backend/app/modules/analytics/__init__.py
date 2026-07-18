@@ -1,1 +1,1 @@
-"""Analytics aggregations. Stage 5."""
+"""Analytics domain."""

@@ -8,6 +8,7 @@ from app.modules.auth.models import (
     RefreshToken,
 )
 from app.modules.categories.models import Category, CategoryRule
+from app.modules.financial_health.models import FinancialScore
 from app.modules.receipts.models import Receipt, ReceiptItem
 from app.modules.users.models import User
 
@@ -17,6 +18,7 @@ __all__ = [
     "Category",
     "CategoryRule",
     "EmailVerificationToken",
+    "FinancialScore",
     "PasswordResetToken",
     "Receipt",
     "ReceiptItem",
