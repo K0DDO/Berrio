@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.fns_client import FnsClient, get_fns_client
 from app.modules.audit.service import AuditService
+from app.modules.categorization.service import CategorizationService
 from app.modules.events import get_event_bus
 from app.modules.events.receipt_events import ReceiptCreatedEvent, ReceiptFetchedEvent
 from app.modules.receipts.models import Receipt, ReceiptItem, ReceiptStatus
@@ -27,6 +28,7 @@ class ReceiptService:
         self._audit = AuditService(session)
         self._bus = get_event_bus()
         self._fns = fns_client or get_fns_client()
+        self._categorization = CategorizationService(session)
 
     async def scan(self, user_id: UUID, data: ReceiptScanRequest) -> ReceiptOut:
         existing = await self._repo.find_by_fingerprint(
@@ -98,6 +100,9 @@ class ReceiptService:
                         sum=line.sum,
                     )
                 )
+            await self._categorization.apply_to_receipt_items(
+                list(receipt.items), user_id=user_id
+            )
             await self._repo.save(receipt)
             await self._bus.publish(
                 ReceiptFetchedEvent(

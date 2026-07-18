@@ -1,1 +1,1 @@
-"""Hierarchical categories. Stage 4."""
+"""Categories package."""

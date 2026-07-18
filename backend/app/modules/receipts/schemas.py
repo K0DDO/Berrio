@@ -22,6 +22,7 @@ class ReceiptItemOut(BaseModel):
     qty: Decimal
     price: Decimal
     sum: Decimal
+    category_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 
