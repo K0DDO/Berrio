@@ -40,9 +40,10 @@ flutter run
 
 - [Product philosophy](docs/product.md)
 - [Architecture](docs/architecture.md)
-- [ERD](docs/erd.md)
+- [Local development](docs/local-development.md)
+- [Android build](docs/android-build.md)
+- [Device testing](docs/device-testing.md)
+- [VPS deployment](docs/vps-deployment.md)
 - [Production checklist](docs/production-checklist.md)
 - [Testing guide](docs/testing-guide.md)
-- [VPS deployment](docs/vps-deployment.md)
-- [Device testing](docs/device-testing.md)
 - [Security review](docs/security-review.md)

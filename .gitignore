@@ -5,8 +5,10 @@ __pycache__/
 venv/
 .env
 .env.prod
+.env.local
 backend/.env
 backend/.env.prod
+backend/.env.local
 backend/backups/
 *.sql.gz
 *.egg-info/

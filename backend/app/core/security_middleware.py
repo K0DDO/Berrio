@@ -99,4 +99,27 @@ def assert_secure_startup() -> None:
         if "SECRET_KEY" in i or "EMAIL_HASH_PEPPER" in i or "DEBUG is enabled" in i
     ]
     if blockers:
-        raise RuntimeError("Insecure production configuration: " + "; ".join(blockers))
+        raise RuntimeError(
+            "Insecure production configuration: "
+            + "; ".join(blockers)
+            + ". Set real secrets in backend/.env.prod (see .env.prod.example)."
+        )
+
+
+def validate_required_env() -> None:
+    """Human-readable check after settings load (complements pydantic validator)."""
+    settings = get_settings()
+    problems: list[str] = []
+    if not settings.secret_key.strip():
+        problems.append("SECRET_KEY is empty")
+    if not settings.database_url.strip():
+        problems.append("DATABASE_URL is empty")
+    if "CHANGE_ME" in settings.database_url.upper():
+        problems.append("DATABASE_URL still contains CHANGE_ME placeholder")
+    if problems:
+        raise RuntimeError(
+            "Berrio cannot start — fix environment:\n  - "
+            + "\n  - ".join(problems)
+            + "\nCopy backend/.env.local.example → backend/.env.local "
+            "(see docs/local-development.md)."
+        )

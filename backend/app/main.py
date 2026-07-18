@@ -13,6 +13,7 @@ from app.core.security_middleware import (
     SecurityHeadersMiddleware,
     assert_secure_startup,
     resolve_cors_origins,
+    validate_required_env,
     warn_insecure_defaults,
 )
 
@@ -23,10 +24,15 @@ logger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configure_logging(debug=settings.debug, level=settings.log_level)
+    validate_required_env()
     assert_secure_startup()
     for warning in warn_insecure_defaults():
         logger.warning("berrio.security_warning", detail=warning)
     logger.info("berrio.startup", env=settings.app_env, version="0.1.0")
+    if settings.seed_demo_data:
+        from app.modules.dev.seed import maybe_seed_on_startup
+
+        await maybe_seed_on_startup()
     yield
     logger.info("berrio.shutdown")
 

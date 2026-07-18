@@ -1,3 +1,12 @@
+# Local stack: Postgres + Redis + API + Celery worker
+#
+# Setup:
+#   cp backend/.env.local.example backend/.env.local
+#   docker compose up --build
+#
+# API: http://localhost:8000/health
+# Docs: http://localhost:8000/docs
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -30,11 +39,17 @@ services:
     env_file:
       - ./backend/.env.example
     environment:
+      APP_ENV: development
+      DEBUG: "true"
+      SEED_DEMO_DATA: "true"
+      SECRET_KEY: local-docker-secret-ok-for-beta
+      EMAIL_HASH_PEPPER: local-docker-email-pepper
       DATABASE_URL: postgresql+asyncpg://berrio:berrio@postgres:5432/berrio
       DATABASE_URL_SYNC: postgresql://berrio:berrio@postgres:5432/berrio
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
+      CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000","*"]'
     ports:
       - "8000:8000"
     depends_on:
@@ -51,6 +66,10 @@ services:
     env_file:
       - ./backend/.env.example
     environment:
+      APP_ENV: development
+      DEBUG: "true"
+      SECRET_KEY: local-docker-secret-ok-for-beta
+      EMAIL_HASH_PEPPER: local-docker-email-pepper
       DATABASE_URL: postgresql+asyncpg://berrio:berrio@postgres:5432/berrio
       DATABASE_URL_SYNC: postgresql://berrio:berrio@postgres:5432/berrio
       REDIS_URL: redis://redis:6379/0
