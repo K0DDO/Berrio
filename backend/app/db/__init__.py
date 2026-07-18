@@ -7,6 +7,7 @@ from app.modules.auth.models import (
     PasswordResetToken,
     RefreshToken,
 )
+from app.modules.banks.models import BankConnection, Transaction
 from app.modules.categories.models import Category, CategoryRule
 from app.modules.financial_health.models import FinancialScore
 from app.modules.receipts.models import Receipt, ReceiptItem
@@ -14,6 +15,7 @@ from app.modules.users.models import User
 
 __all__ = [
     "AuditLog",
+    "BankConnection",
     "Base",
     "Category",
     "CategoryRule",
@@ -23,5 +25,6 @@ __all__ = [
     "Receipt",
     "ReceiptItem",
     "RefreshToken",
+    "Transaction",
     "User",
 ]
