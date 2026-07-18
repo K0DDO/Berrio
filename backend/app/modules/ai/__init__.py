@@ -1,1 +1,5 @@
-"""AI Economist (Kimi). Stage 6."""
+"""AI Economist domain."""
+
+from app.modules.ai.router import router
+
+__all__ = ["router"]

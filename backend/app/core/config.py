@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     email_verification_expire_hours: int = 24
     password_reset_expire_hours: int = 1
 
+    kimi_api_key: str | None = None
+    kimi_base_url: str = "https://api.moonshot.cn/v1"
+    kimi_model: str = "moonshot-v1-8k"
+
     database_url: str = "postgresql+asyncpg://berrio:berrio@localhost:5432/berrio"
     database_url_sync: str = "postgresql://berrio:berrio@localhost:5432/berrio"
 
