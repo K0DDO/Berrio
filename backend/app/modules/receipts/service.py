@@ -249,7 +249,7 @@ class ReceiptService:
             and structured.amount.value is not None
         )
 
-        receipt = await self._repo.create_pending(
+        pending = await self._repo.create_pending(
             user_id=user_id,
             fn=fn,
             fd=fd,
@@ -258,7 +258,7 @@ class ReceiptService:
             total_amount=structured.amount.value,
         )
         # Reload with items relationship to avoid async lazy-load
-        receipt = await self._repo.get_by_id(receipt.id, user_id)
+        receipt = await self._repo.get_by_id(pending.id, user_id)
         assert receipt is not None
         receipt.store_name = structured.merchant.value
         receipt.recognition_json = json.dumps(
