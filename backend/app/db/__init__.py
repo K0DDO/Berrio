@@ -7,6 +7,7 @@ from app.modules.auth.models import (
     PasswordResetToken,
     RefreshToken,
 )
+from app.modules.receipts.models import Receipt, ReceiptItem
 from app.modules.users.models import User
 
 __all__ = [
@@ -14,6 +15,8 @@ __all__ = [
     "Base",
     "EmailVerificationToken",
     "PasswordResetToken",
+    "Receipt",
+    "ReceiptItem",
     "RefreshToken",
     "User",
 ]

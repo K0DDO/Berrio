@@ -42,6 +42,8 @@ flutter run
 - [Architecture](docs/architecture.md)
 - [ERD](docs/erd.md)
 - [Auth API](docs/api-auth.md)
+- [Receipts API](docs/api-receipts.md)
 - [Security](docs/security.md)
 - [Sprint 1](docs/sprints/sprint-01.md)
 - [Sprint 2 — Auth](docs/sprints/sprint-02.md)
+- [Sprint 3 — Receipts](docs/sprints/sprint-03.md)
