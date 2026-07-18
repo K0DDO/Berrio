@@ -112,6 +112,14 @@ flutter analyze
 flutter test
 ```
 
+### Pre-commit (optional but recommended)
+
+```bash
+pip install pre-commit
+pre-commit install
+# runs ruff, black, mypy on commit
+```
+
 ## Troubleshooting
 
 | Symptom | Fix |

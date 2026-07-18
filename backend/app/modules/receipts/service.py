@@ -11,10 +11,10 @@ from app.integrations.fns_client import FnsClient, get_fns_client
 from app.modules.audit.service import AuditService
 from app.modules.budgets.models import Budget, BudgetStatus
 from app.modules.budgets.service import BudgetService
+from app.modules.categories.models import Category
 from app.modules.categorization.service import CategorizationService
 from app.modules.events import get_event_bus
 from app.modules.events.receipt_events import ReceiptCreatedEvent, ReceiptFetchedEvent
-from app.modules.categories.models import Category
 from app.modules.notifications.service import NotificationService
 from app.modules.products.models import ProductPriceHistory
 from app.modules.products.service import ProductService
@@ -61,9 +61,7 @@ class ReceiptService:
             entity_id=receipt.id,
             metadata={"fn": data.fn, "fd": data.fd, "fp": data.fp},
         )
-        await self._bus.publish(
-            ReceiptCreatedEvent.build(receipt_id=receipt.id, user_id=user_id)
-        )
+        await self._bus.publish(ReceiptCreatedEvent.build(receipt_id=receipt.id, user_id=user_id))
         await self._session.commit()
 
         # Stage 3: process inline via stub FNS (Celery wire stays for later scale)
@@ -109,9 +107,7 @@ class ReceiptService:
                         sum=line.sum,
                     )
                 )
-            await self._categorization.apply_to_receipt_items(
-                list(receipt.items), user_id=user_id
-            )
+            await self._categorization.apply_to_receipt_items(list(receipt.items), user_id=user_id)
             for item in receipt.items:
                 await self._products.resolve_for_receipt_item(
                     item,
@@ -185,7 +181,9 @@ class ReceiptService:
         for (budget_id,) in result.all():
             await budget_service.check_thresholds([user_id], budget_id)
 
-    async def get(self, user_id: UUID, receipt_id: UUID, *, scope_user_ids: list[UUID] | None = None) -> ReceiptOut:
+    async def get(
+        self, user_id: UUID, receipt_id: UUID, *, scope_user_ids: list[UUID] | None = None
+    ) -> ReceiptOut:
         ids = scope_user_ids or [user_id]
         receipt = await self._repo.get_for_users(receipt_id, ids)
         if receipt is None:

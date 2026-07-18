@@ -37,7 +37,9 @@ STORES: tuple[StoreFixture, ...] = (
 
 # Expected categorization / product normalization cases.
 LINE_ITEMS: tuple[LineItemFixture, ...] = (
-    LineItemFixture("Простоквашино Молоко 2.5% 930мл", "food.dairy", "Простоквашино", Decimal("930")),
+    LineItemFixture(
+        "Простоквашино Молоко 2.5% 930мл", "food.dairy", "Простоквашино", Decimal("930")
+    ),
     LineItemFixture("Хлеб Бородинский", "food.grocery"),
     LineItemFixture("Кофе Латте", "food.cafe"),
     LineItemFixture("Книга Гарри Поттер", "growth.books"),

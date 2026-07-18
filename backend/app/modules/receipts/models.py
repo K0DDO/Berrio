@@ -63,7 +63,10 @@ class ReceiptItem(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     receipt_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("receipts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     name_raw: Mapped[str] = mapped_column(String(512), nullable=False)
     qty: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False, default=Decimal("1"))

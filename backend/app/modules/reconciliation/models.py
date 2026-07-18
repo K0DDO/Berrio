@@ -32,10 +32,16 @@ class ReconciliationMatch(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     receipt_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("receipts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     transaction_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
     confidence: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("0"))

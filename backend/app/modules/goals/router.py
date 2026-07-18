@@ -6,8 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.modules.auth.dependencies import get_current_user_id
-from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
-from app.modules.goals.schemas import GoalCreate, GoalOut, GoalProgressUpdate, GoalUpdate
+from app.modules.families.permission_checker import (
+    FamilyPermissionChecker,
+    FamilyPermissionKey,
+)
+from app.modules.goals.schemas import (
+    GoalCreate,
+    GoalOut,
+    GoalProgressUpdate,
+    GoalUpdate,
+)
 from app.modules.goals.service import GoalService
 
 router = APIRouter(prefix="/goals", tags=["goals"])

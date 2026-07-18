@@ -2,7 +2,13 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.encryption import EncryptionService, get_encryption_service
-from app.core.security import decrypt_email, encrypt_email, hash_email, hash_password, verify_password
+from app.core.security import (
+    decrypt_email,
+    encrypt_email,
+    hash_email,
+    hash_password,
+    verify_password,
+)
 
 
 def test_argon2id_hash_and_verify() -> None:

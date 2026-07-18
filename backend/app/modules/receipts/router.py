@@ -6,7 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.modules.auth.dependencies import get_current_user_id
-from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
+from app.modules.families.permission_checker import (
+    FamilyPermissionChecker,
+    FamilyPermissionKey,
+)
 from app.modules.receipts.schemas import ReceiptListOut, ReceiptOut, ReceiptScanRequest
 from app.modules.receipts.service import ReceiptService
 

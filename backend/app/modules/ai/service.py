@@ -183,9 +183,7 @@ class AiService:
             )
             self._session.add(row)
             await self._session.flush()
-            out.append(
-                AiInsightOut(id=row.id, title=row.title, body=row.body, kind=row.kind)
-            )
+            out.append(AiInsightOut(id=row.id, title=row.title, body=row.body, kind=row.kind))
         return out
 
     async def submit_feedback(
@@ -232,9 +230,10 @@ class AiService:
 
     @staticmethod
     def _build_context(summary) -> str:
-        top = ", ".join(
-            f"{c.category_name}: {c.amount}" for c in summary.by_category[:5]
-        ) or "нет данных"
+        top = (
+            ", ".join(f"{c.category_name}: {c.amount}" for c in summary.by_category[:5])
+            or "нет данных"
+        )
         return (
             f"Период: {summary.period}. Сумма расходов: {summary.total_spend}. "
             f"Чеков: {summary.receipt_count}. Berrio Score: {summary.berrio_score}. "

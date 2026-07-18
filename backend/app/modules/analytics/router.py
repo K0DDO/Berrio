@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db_session
 from app.modules.analytics.service import AnalyticsService, AnalyticsSummaryOut
 from app.modules.auth.dependencies import get_current_user_id
-from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
+from app.modules.families.permission_checker import (
+    FamilyPermissionChecker,
+    FamilyPermissionKey,
+)
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 

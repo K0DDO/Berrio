@@ -13,7 +13,6 @@ from app.modules.notifications.service import NotificationService
 from app.modules.products.models import Product, ProductPriceHistory, ProductVariant
 from app.modules.receipts.models import ReceiptItem
 
-
 _VOLUME_RE = re.compile(
     r"(?P<num>\d+[.,]?\d*)\s*(?P<unit>мл|ml|л|l|г|g|кг|kg)\b",
     re.IGNORECASE,

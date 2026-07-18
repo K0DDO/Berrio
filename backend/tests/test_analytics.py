@@ -37,7 +37,7 @@ async def test_analytics_summary_after_receipt(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_financial_health_score_endpoint(client: AsyncClient) -> None:
-    tokens = await _auth(client)
+    await _auth(client)
     # re-register conflict — use unique via login path from previous? use new email
     reg = await client.post(
         "/api/v1/auth/register",

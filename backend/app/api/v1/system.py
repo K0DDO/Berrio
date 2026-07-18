@@ -42,9 +42,7 @@ async def list_foundation_modules() -> dict[str, list[str]]:
 async def ping_event_bus() -> dict[str, str]:
     """Smoke-test EventBus abstraction (log-only in Sprint 1)."""
     bus = get_event_bus()
-    await bus.publish(
-        DomainEvent(event_type="system.ping", payload={"source": "api"})
-    )
+    await bus.publish(DomainEvent(event_type="system.ping", payload={"source": "api"}))
     return {"status": "published", "event_type": "system.ping"}
 
 

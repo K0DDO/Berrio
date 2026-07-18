@@ -103,7 +103,9 @@ class AnalyticsService:
             by_category.append(
                 CategorySpendOut(
                     category_id=cat_id,
-                    category_name=cat_names.get(cat_id, "Без категории") if cat_id else "Без категории",
+                    category_name=(
+                        cat_names.get(cat_id, "Без категории") if cat_id else "Без категории"
+                    ),
                     amount=amount.quantize(Decimal("0.01")),
                     share=round(share, 4),
                 )

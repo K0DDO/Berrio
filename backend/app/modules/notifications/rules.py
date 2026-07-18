@@ -99,13 +99,10 @@ class NotificationRulesEngine:
         return NotificationCreate(
             user_id=user_id,
             type=NotificationType.PRICE_CHANGE,
-            severity=NotificationSeverity.WARNING
-            if delta_pct >= 20
-            else NotificationSeverity.INFO,
+            severity=NotificationSeverity.WARNING if delta_pct >= 20 else NotificationSeverity.INFO,
             title="Price increased",
             message=(
-                f"{product_name}{store}: {old_price} RUB -> {new_price} RUB "
-                f"(+{delta_pct:.0f}%)"
+                f"{product_name}{store}: {old_price} RUB -> {new_price} RUB " f"(+{delta_pct:.0f}%)"
             ),
             payload={
                 "product_variant_id": str(variant_id),

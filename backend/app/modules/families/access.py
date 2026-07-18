@@ -37,7 +37,9 @@ class FamilyAccessService:
         perm = result.scalar_one_or_none()
         allowed = perm.allowed if perm is not None else False
         if not allowed and member.role != FamilyRole.OWNER:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail=f"Missing permission: {permission_key}")
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, detail=f"Missing permission: {permission_key}"
+            )
         return member
 
     async def visible_user_ids(self, actor_id: UUID, family_id: UUID) -> list[UUID]:

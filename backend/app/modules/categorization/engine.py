@@ -63,7 +63,7 @@ class RuleBasedCategorizationEngine(CategorizationEngine):
         return CategorizationResult(category_id=None, source="unknown", confidence=0.0)
 
     async def _load_rules(self, user_id: UUID | None) -> list[_RuleView]:
-        conditions = [CategoryRule.user_id.is_(None)]
+        conditions: list = [CategoryRule.user_id.is_(None)]
         if user_id is not None:
             conditions.append(CategoryRule.user_id == user_id)
         result = await self._session.execute(

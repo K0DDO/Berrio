@@ -25,11 +25,16 @@ class FinancialGoal(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     family_id: Mapped[UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("families.id", ondelete="SET NULL"), nullable=True, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("families.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     target_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
-    current_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0"))
+    current_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False, default=Decimal("0")
+    )
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="RUB")
     deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
     category: Mapped[str | None] = mapped_column(String(80), nullable=True)

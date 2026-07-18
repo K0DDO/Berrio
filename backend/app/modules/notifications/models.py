@@ -37,12 +37,17 @@ class Notification(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     family_id: Mapped[UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("families.id", ondelete="SET NULL"), nullable=True, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("families.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    severity: Mapped[str] = mapped_column(String(16), nullable=False, default=NotificationSeverity.INFO)
+    severity: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=NotificationSeverity.INFO
+    )
     payload: Mapped[dict] = mapped_column(
         JSON().with_variant(JSONB(), "postgresql"),
         nullable=False,

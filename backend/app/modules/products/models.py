@@ -33,7 +33,10 @@ class ProductVariant(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     product_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     barcode: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     weight: Mapped[Decimal | None] = mapped_column(Numeric(14, 3), nullable=True)

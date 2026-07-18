@@ -67,9 +67,7 @@ class BankService:
         )
         return list(result.scalars().all())
 
-    async def ingest_email(
-        self, user_id: UUID, data: ParseEmailRequest
-    ) -> list[Transaction]:
+    async def ingest_email(self, user_id: UUID, data: ParseEmailRequest) -> list[Transaction]:
         from datetime import UTC, datetime
 
         parser = get_parser(data.bank_code)

@@ -8,7 +8,10 @@ from app.db.session import get_db_session
 from app.modules.auth.dependencies import get_current_user_id
 from app.modules.budgets.schemas import BudgetCreate, BudgetOut, BudgetUpdate
 from app.modules.budgets.service import BudgetService
-from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
+from app.modules.families.permission_checker import (
+    FamilyPermissionChecker,
+    FamilyPermissionKey,
+)
 
 router = APIRouter(prefix="/budgets", tags=["budgets"])
 

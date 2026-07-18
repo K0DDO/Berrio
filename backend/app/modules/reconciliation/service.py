@@ -10,7 +10,10 @@ from app.modules.banks.models import Transaction
 from app.modules.receipts.models import Receipt, ReceiptStatus
 from app.modules.reconciliation.engine import ReconciliationEngine
 from app.modules.reconciliation.models import MatchStatus, ReconciliationMatch
-from app.modules.reconciliation.schemas import ReconciliationMatchOut, ReconciliationRunResult
+from app.modules.reconciliation.schemas import (
+    ReconciliationMatchOut,
+    ReconciliationRunResult,
+)
 
 
 class ReconciliationService:

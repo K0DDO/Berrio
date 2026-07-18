@@ -114,8 +114,7 @@ class ProverkaChekaFnsClient(FnsClient):
         qrraw = self._build_qrraw(
             fn=fn, fd=fd, fp=fp, purchased_at=purchased_at, total_amount=total_amount
         )
-        payload = {"token": self._token, "qrraw": qrraw}
-        # Also send discrete fields — some plans accept form-style
+        # Form-style payload — some plans also accept qrraw alongside discrete fields
         form = {
             "token": self._token,
             "fn": fn,
@@ -182,8 +181,10 @@ class ProverkaChekaFnsClient(FnsClient):
         when = self._parse_dt(ticket.get("dateTime") or ticket.get("date_time")) or (
             fallback_when or datetime.now(UTC)
         )
-        total_raw = ticket.get("totalSum") if ticket.get("totalSum") is not None else ticket.get(
-            "total_amount"
+        total_raw = (
+            ticket.get("totalSum")
+            if ticket.get("totalSum") is not None
+            else ticket.get("total_amount")
         )
         total = self._money(total_raw)
         if total is None:

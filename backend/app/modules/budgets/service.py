@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from uuid import UUID
 
@@ -124,7 +124,7 @@ class BudgetService:
         return out
 
     async def _spent_amount(self, budget: Budget, scope_user_ids: list[UUID]) -> Decimal:
-        start = datetime.combine(budget.period_start, time.min, tzinfo=timezone.utc)
+        start = datetime.combine(budget.period_start, time.min, tzinfo=UTC)
         end_date = _period_end(budget)
         stmt = select(func.coalesce(func.sum(Receipt.total_amount), 0)).where(
             Receipt.user_id.in_(scope_user_ids),
@@ -133,7 +133,7 @@ class BudgetService:
             Receipt.purchased_at >= start,
         )
         if end_date is not None:
-            end = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+            end = datetime.combine(end_date, time.max, tzinfo=UTC)
             stmt = stmt.where(Receipt.purchased_at <= end)
         # Category filter deferred until receipt items are joined in analytics.
         result = await self._session.execute(stmt)

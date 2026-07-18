@@ -7,7 +7,11 @@ from app.modules.notifications.channels import (
     StubEmailChannel,
     StubPushChannel,
 )
-from app.modules.notifications.models import Notification, NotificationSeverity, NotificationType
+from app.modules.notifications.models import (
+    Notification,
+    NotificationSeverity,
+    NotificationType,
+)
 from app.modules.notifications.router import router
 from app.modules.notifications.rules import NotificationRulesEngine
 from app.modules.notifications.service import NotificationService

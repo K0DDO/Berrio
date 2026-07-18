@@ -24,7 +24,9 @@ class ImapMailbox(Protocol):
     5. Update last_synced_at
     """
 
-    async def fetch_unseen(self, *, folder: str = "INBOX", limit: int = 50) -> list[MailMessage]: ...
+    async def fetch_unseen(
+        self, *, folder: str = "INBOX", limit: int = 50
+    ) -> list[MailMessage]: ...
 
 
 class NotConfiguredImapMailbox:

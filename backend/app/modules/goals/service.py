@@ -9,7 +9,12 @@ from app.modules.audit.service import AuditService
 from app.modules.events import get_event_bus
 from app.modules.events.goal_events import GoalProgressUpdatedEvent
 from app.modules.goals.models import FinancialGoal, GoalStatus
-from app.modules.goals.schemas import GoalCreate, GoalOut, GoalProgressUpdate, GoalUpdate
+from app.modules.goals.schemas import (
+    GoalCreate,
+    GoalOut,
+    GoalProgressUpdate,
+    GoalUpdate,
+)
 from app.modules.notifications.service import NotificationService
 
 
@@ -78,7 +83,9 @@ class GoalService:
         goal = await self._get(user_ids, goal_id)
         return _to_out(goal)
 
-    async def update(self, user_ids: list[UUID], actor_id: UUID, goal_id: UUID, body: GoalUpdate) -> GoalOut:
+    async def update(
+        self, user_ids: list[UUID], actor_id: UUID, goal_id: UUID, body: GoalUpdate
+    ) -> GoalOut:
         goal = await self._get(user_ids, goal_id)
         data = body.model_dump(exclude_unset=True)
         for key, value in data.items():

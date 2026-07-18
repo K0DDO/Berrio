@@ -39,7 +39,9 @@ class AuthRepository:
         )
         return result.scalar_one_or_none()
 
-    async def revoke_refresh(self, token: RefreshToken, *, replaced_by_id: UUID | None = None) -> None:
+    async def revoke_refresh(
+        self, token: RefreshToken, *, replaced_by_id: UUID | None = None
+    ) -> None:
         token.revoked_at = datetime.now(UTC)
         if replaced_by_id is not None:
             token.replaced_by_id = replaced_by_id
@@ -59,12 +61,16 @@ class AuthRepository:
         await self._session.flush()
         return len(tokens)
 
-    async def add_email_verification_token(self, token: EmailVerificationToken) -> EmailVerificationToken:
+    async def add_email_verification_token(
+        self, token: EmailVerificationToken
+    ) -> EmailVerificationToken:
         self._session.add(token)
         await self._session.flush()
         return token
 
-    async def get_email_verification_by_hash(self, token_hash: str) -> EmailVerificationToken | None:
+    async def get_email_verification_by_hash(
+        self, token_hash: str
+    ) -> EmailVerificationToken | None:
         result = await self._session.execute(
             select(EmailVerificationToken).where(EmailVerificationToken.token_hash == token_hash)
         )

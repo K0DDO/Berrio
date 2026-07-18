@@ -130,7 +130,9 @@ class ReconciliationEngine:
             reasons["merchant"] = "missing_name"
 
         confidence = (
-            (score / w.total * Decimal("100")).quantize(Decimal("0.01")) if w.total > 0 else Decimal("0")
+            (score / w.total * Decimal("100")).quantize(Decimal("0.01"))
+            if w.total > 0
+            else Decimal("0")
         )
 
         if merchant_conflict and score >= self._min_score:
@@ -175,7 +177,7 @@ class ReconciliationEngine:
         for c in pairs:
             by_receipt.setdefault(c.receipt_id, []).append(c)
         resolved: list[MatchCandidate] = []
-        for receipt_id, cands in by_receipt.items():
+        for _receipt_id, cands in by_receipt.items():
             cands.sort(key=lambda c: c.score, reverse=True)
             if len(cands) > 1 and cands[0].score - cands[1].score < Decimal("10"):
                 top = cands[0]

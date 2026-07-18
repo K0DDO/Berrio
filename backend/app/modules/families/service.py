@@ -17,7 +17,10 @@ from app.modules.families.models import (
     FamilyPermission,
     FamilyRole,
 )
-from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
+from app.modules.families.permission_checker import (
+    FamilyPermissionChecker,
+    FamilyPermissionKey,
+)
 from app.modules.users.models import User
 
 _INVITE_RATE: dict[str, list[float]] = {}
@@ -274,7 +277,9 @@ class FamilyService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invite not found")
 
         now = datetime.now(UTC)
-        expires = invite.expires_at if invite.expires_at.tzinfo else invite.expires_at.replace(tzinfo=UTC)
+        expires = (
+            invite.expires_at if invite.expires_at.tzinfo else invite.expires_at.replace(tzinfo=UTC)
+        )
         if invite.status != FamilyInviteStatus.PENDING or expires < now:
             if invite.status == FamilyInviteStatus.PENDING and expires < now:
                 invite.status = FamilyInviteStatus.EXPIRED

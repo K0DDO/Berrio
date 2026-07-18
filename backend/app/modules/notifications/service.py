@@ -28,7 +28,6 @@ from app.modules.notifications.preferences import NotificationPreferences
 from app.modules.notifications.rules import NotificationRulesEngine
 from app.modules.notifications.schemas import NotificationCreate, NotificationOut
 
-
 _PREF_MAP = {
     NotificationType.PRICE_CHANGE: "price_changes_enabled",
     NotificationType.BUDGET_WARNING: "budget_alerts_enabled",

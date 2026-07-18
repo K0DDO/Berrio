@@ -170,7 +170,7 @@ async def test_reconciliation_confirm_matched(client: AsyncClient) -> None:
         headers=headers,
     )
     # High-confidence pairs may land as MATCHED already
-    all_status = await client.get("/api/v1/reconciliation/suggestions?status=", headers=headers)
+    await client.get("/api/v1/reconciliation/suggestions?status=", headers=headers)
     # empty status filter — our API treats "" as status; use without filter via SUGGESTED or MATCHED
     matched = await client.get(
         "/api/v1/reconciliation/suggestions?status=MATCHED",

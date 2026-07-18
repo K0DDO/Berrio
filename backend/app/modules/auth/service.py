@@ -183,8 +183,7 @@ class AuthService:
             device_name=stored.device_name,
             user_agent=user_agent or stored.user_agent,
             ip_hash=ip_hash,
-            expires_at=datetime.now(UTC)
-            + timedelta(days=self._settings.refresh_token_expire_days),
+            expires_at=datetime.now(UTC) + timedelta(days=self._settings.refresh_token_expire_days),
         )
         await self._repo.add_refresh_token(new_row)
         await self._repo.revoke_refresh(stored, replaced_by_id=new_row.id)
@@ -378,8 +377,7 @@ class AuthService:
             device_name=device_name,
             user_agent=user_agent,
             ip_hash=ip_hash,
-            expires_at=datetime.now(UTC)
-            + timedelta(days=self._settings.refresh_token_expire_days),
+            expires_at=datetime.now(UTC) + timedelta(days=self._settings.refresh_token_expire_days),
         )
         await self._repo.add_refresh_token(refresh_row)
         access = create_access_token(user_id=user.id)

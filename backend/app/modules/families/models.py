@@ -55,11 +55,16 @@ class Family(Base):
 
 class FamilyMember(Base):
     __tablename__ = "family_members"
-    __table_args__ = (UniqueConstraint("family_id", "user_id", name="uq_family_members_family_user"),)
+    __table_args__ = (
+        UniqueConstraint("family_id", "user_id", name="uq_family_members_family_user"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     family_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("families.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("families.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
@@ -83,7 +88,10 @@ class FamilyPermission(Base):
         Uuid(as_uuid=True), ForeignKey("families.id", ondelete="CASCADE"), nullable=False
     )
     member_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("family_members.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("family_members.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     permission_key: Mapped[str] = mapped_column(String(64), nullable=False)
     allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -101,7 +109,10 @@ class FamilyInvite(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     family_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("families.id", ondelete="CASCADE"), nullable=False, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("families.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     invited_by_user_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -109,7 +120,9 @@ class FamilyInvite(Base):
     email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default=FamilyInviteStatus.PENDING)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=FamilyInviteStatus.PENDING
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     accepted_by_user_id: Mapped[UUID | None] = mapped_column(

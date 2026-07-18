@@ -13,7 +13,10 @@ from app.modules.banks.service import (
     ParseEmailRequest,
     TransactionOut,
 )
-from app.modules.families.permission_checker import FamilyPermissionChecker, FamilyPermissionKey
+from app.modules.families.permission_checker import (
+    FamilyPermissionChecker,
+    FamilyPermissionKey,
+)
 
 router = APIRouter(prefix="/banks", tags=["banks"])
 

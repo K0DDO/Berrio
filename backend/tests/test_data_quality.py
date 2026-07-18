@@ -9,6 +9,12 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from tests.fixtures.beta_dataset import (
+    CATEGORIZATION_MIN_ACCURACY,
+    LINE_ITEMS,
+    STORES,
+    TRANSACTIONS,
+)
 
 from app.modules.banks.models import Transaction
 from app.modules.categorization.engine import (
@@ -20,12 +26,6 @@ from app.modules.merchants.normalizer import MerchantNormalizer
 from app.modules.products.service import ProductService
 from app.modules.receipts.models import Receipt, ReceiptItem, ReceiptStatus
 from app.modules.reconciliation.engine import ReconciliationEngine
-from tests.fixtures.beta_dataset import (
-    CATEGORIZATION_MIN_ACCURACY,
-    LINE_ITEMS,
-    STORES,
-    TRANSACTIONS,
-)
 
 
 @pytest.mark.asyncio
