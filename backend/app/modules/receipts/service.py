@@ -22,6 +22,8 @@ from app.modules.notifications.service import NotificationService
 from app.modules.products.models import ProductPriceHistory
 from app.modules.products.service import ProductService
 from app.modules.receipts.models import Receipt, ReceiptItem, ReceiptStatus
+from app.modules.receipts.normalization import LineItemNormalizer
+from app.modules.receipts.normalization.template_loader import build_normalizer
 from app.modules.receipts.recognition import (
     CONFIDENCE_AUTO_SAVE_THRESHOLD,
     ReceiptRecognitionPipeline,
@@ -34,12 +36,10 @@ from app.modules.receipts.recognition.models import (
     RecognizedItem,
     StructuredReceipt,
 )
-from app.modules.receipts.normalization import LineItemNormalizer
-from app.modules.receipts.normalization.template_loader import build_normalizer
 from app.modules.receipts.recognition.validator import (
+    build_receipt_warnings,
     looks_like_hallucinated_stub,
     validate_structured,
-    build_receipt_warnings,
 )
 from app.modules.receipts.repository import ReceiptRepository
 from app.modules.receipts.schemas import ReceiptItemOut, ReceiptOut, ReceiptScanRequest
@@ -185,9 +185,7 @@ class ReceiptService:
                 receipt.status = ReceiptStatus.DONE
                 normalizer = await self._ensure_normalizer(user_id)
                 for line in data.items:
-                    normalized = normalizer.normalize(
-                        line.name, merchant=receipt.store_name
-                    )
+                    normalized = normalizer.normalize(line.name, merchant=receipt.store_name)
                     receipt.items.append(
                         ReceiptItem(
                             name_raw=line.name,
@@ -353,7 +351,11 @@ class ReceiptService:
         receipt = await self._repo.get_by_id(receipt_id, user_id)
         if receipt is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Receipt not found")
-        if receipt.status == ReceiptStatus.DONE and not body.confirm_as_is and not body.save_as_draft:
+        if (
+            receipt.status == ReceiptStatus.DONE
+            and not body.confirm_as_is
+            and not body.save_as_draft
+        ):
             return await self._to_out(receipt)
 
         if body.store_name is not None:
@@ -653,9 +655,7 @@ class ReceiptService:
             purchased_at=receipt.purchased_at,
             item_names=[i.name_raw for i in receipt.items],
             item_sums=[i.sum for i in receipt.items if i.sum is not None],
-            error_message=receipt.error_message
-            if receipt.status != ReceiptStatus.DONE
-            else None,
+            error_message=receipt.error_message if receipt.status != ReceiptStatus.DONE else None,
         )
         if recognition and isinstance(recognition.get("validation_reasons"), list):
             for reason in recognition["validation_reasons"]:

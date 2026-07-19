@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
 
-
 _ARTICLE_RE = re.compile(
     r"(?:^|\s)(?:№|N[oо]?\.?|#)\s*\d{4,}\b|\b\d{8,}\b",
     re.IGNORECASE,
