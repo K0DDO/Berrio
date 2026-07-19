@@ -1,7 +1,8 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, LargeBinary, String, func
+from sqlalchemy import Boolean, DateTime, LargeBinary, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -20,6 +21,13 @@ class User(Base):
     email_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    monthly_income: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    monthly_obligations: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    monthly_savings_target: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    ignore_receipt_time_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
