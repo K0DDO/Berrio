@@ -1,6 +1,7 @@
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
 
 import '../../../shared/widgets/journey_state_panel.dart';
 import '../data/banks_api.dart';
@@ -54,6 +55,33 @@ class _BanksScreenState extends ConsumerState<BanksScreen> {
   ({String code, String label, String instruction}) get _selected =>
       _banks.firstWhere((b) => b.code == _bankCode);
 
+  String _friendlyError(Object error) {
+    if (error is DioException) {
+      final code = error.response?.statusCode;
+      if (code == 404) {
+        return 'Сервер ещё без загрузки выписок. Обновите приложение после деплоя API или попробуйте позже.';
+      }
+      if (code == 401 || code == 403) {
+        return 'Нужно войти в аккаунт заново.';
+      }
+      if (code == 413) {
+        return 'Файл слишком большой (макс. 15 МБ).';
+      }
+      if (code == 422) {
+        final detail = error.response?.data;
+        if (detail is Map && detail['detail'] != null) {
+          return detail['detail'].toString();
+        }
+        return 'Не удалось разобрать выписку. Попробуйте CSV или XLSX.';
+      }
+      if (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout) {
+        return 'Нет связи с сервером. Проверьте интернет.';
+      }
+    }
+    return 'Не удалось загрузить выписку. Попробуйте другой формат файла.';
+  }
+
   Future<void> _pickAndUpload() async {
     setState(() {
       _error = null;
@@ -83,7 +111,7 @@ class _BanksScreenState extends ConsumerState<BanksScreen> {
       setState(() => _messages = out.messages);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '$e');
+      setState(() => _error = _friendlyError(e));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }

@@ -38,9 +38,9 @@ class JourneyStatePanel extends StatelessWidget {
   }) {
     return JourneyStatePanel(
       icon: Icons.error_outline,
-      title: 'Something went wrong',
+      title: 'Что-то пошло не так',
       message: message,
-      actionLabel: onRetry == null ? null : 'Retry',
+      actionLabel: onRetry == null ? null : 'Повторить',
       onAction: onRetry,
     );
   }
