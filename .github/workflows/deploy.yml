@@ -28,11 +28,26 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
+          BERRIO_PATH: ${{ secrets.BERRIO_PATH }}
         run: |
           set -euo pipefail
-          ssh -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" bash -s <<'REMOTE'
+          ssh -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" \
+            "export BERRIO_PATH='${BERRIO_PATH:-}'; bash -s" <<'REMOTE'
           set -euo pipefail
-          cd /opt/berrio
+
+          APP_DIR=""
+          for candidate in ${BERRIO_PATH:-} /opt/berrio "$HOME/berrio"; do
+            if [[ -n "${candidate}" && -d "${candidate}" && -f "${candidate}/docker-compose.production.yml" ]]; then
+              APP_DIR="${candidate}"
+              break
+            fi
+          done
+          if [[ -z "${APP_DIR}" ]]; then
+            echo "Berrio install not found (tried BERRIO_PATH, /opt/berrio, ~/berrio)" >&2
+            exit 1
+          fi
+          cd "${APP_DIR}"
+          echo "==> Using ${APP_DIR}"
 
           COMPOSE="docker compose -f docker-compose.production.yml --env-file .env.production"
           API_HOST_PORT="$(grep -E '^API_HOST_PORT=' .env.production 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' || true)"
@@ -44,7 +59,7 @@ jobs:
             echo "Deploy failed — rolling back to ${PREV_SHA}"
             git reset --hard "${PREV_SHA}"
             ${COMPOSE} build --pull
-            ${COMPOSE} up -d
+            ${COMPOSE} up -d --force-recreate
             exit 1
           }
 
@@ -55,16 +70,17 @@ jobs:
           git fetch origin main
           git checkout main
           git pull --ff-only origin main
+          echo "Host SHA $(git rev-parse --short HEAD)"
 
-          echo "==> Build"
-          ${COMPOSE} build --pull
+          echo "==> Build (no cache for api — avoid stale routes)"
+          ${COMPOSE} build --pull --no-cache api worker
 
           echo "==> Migrate"
           ${COMPOSE} up -d postgres redis
           ${COMPOSE} run --rm --no-deps api alembic upgrade head
 
           echo "==> Restart"
-          ${COMPOSE} up -d
+          ${COMPOSE} up -d --force-recreate --remove-orphans
 
           echo "==> Health"
           ok=0
@@ -79,7 +95,17 @@ jobs:
             rollback
           fi
 
-          echo "Deploy OK $(git rev-parse --short HEAD)"
+          echo "==> Verify statements upload route (expect 401, not 404)"
+          stmt_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            "http://127.0.0.1:${API_HOST_PORT}/api/v1/banks/statements/upload" || true)"
+          echo "POST /banks/statements/upload → ${stmt_code}"
+          if [[ "${stmt_code}" == "404" ]]; then
+            echo "Statements route missing in running container" >&2
+            ${COMPOSE} exec -T api python -c "import pathlib; print(pathlib.Path('app/modules/banks/router.py').read_text()[:500])" || true
+            rollback
+          fi
+
+          echo "Deploy OK $(git rev-parse --short HEAD) @ ${APP_DIR}"
           curl -fsS "${HEALTH_URL}"
           echo
           REMOTE

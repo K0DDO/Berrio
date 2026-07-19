@@ -56,18 +56,27 @@ echo "==> Backup database"
 echo "==> git pull"
 git pull --ff-only origin main
 
-echo "==> Build images"
-compose build --pull
+echo "==> Build images (no-cache api to avoid stale routes)"
+compose build --pull --no-cache api worker
 
 echo "==> Migrations (idempotent; also runs on api start)"
 compose up -d postgres redis
 compose run --rm --no-deps api alembic upgrade head
 
 echo "==> Restart stack"
-compose up -d
+compose up -d --force-recreate --remove-orphans
 
 echo "==> Health check"
 health_check
+
+echo "==> Verify statements upload route (expect 401, not 404)"
+stmt_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+  "http://127.0.0.1:${API_HOST_PORT}/api/v1/banks/statements/upload" || true)"
+echo "POST /banks/statements/upload → ${stmt_code}"
+if [[ "${stmt_code}" == "404" ]]; then
+  echo "Statements route missing in running container" >&2
+  exit 1
+fi
 
 trap - ERR
 echo "==> Deploy complete ($(git rev-parse --short HEAD))"
