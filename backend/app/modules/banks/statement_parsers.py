@@ -120,7 +120,7 @@ class CsvStatementParser:
             if amount is None:
                 continue
             dm = _DATE_RE.search(line)
-            booked = _parse_date(dm.group("d")) if dm else datetime.now(UTC)
+            booked = (_parse_date(dm.group("d")) if dm else None) or datetime.now(UTC)
             merchant = _AMOUNT_RE.sub("", line)
             if dm:
                 merchant = merchant.replace(dm.group("d"), "")

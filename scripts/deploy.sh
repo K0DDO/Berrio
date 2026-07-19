@@ -69,12 +69,12 @@ compose up -d --force-recreate --remove-orphans
 echo "==> Health check"
 health_check
 
-echo "==> Verify statements upload route (expect 401, not 404)"
+echo "==> Verify statements upload route (expect 401/422, not 404)"
 stmt_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
   "http://127.0.0.1:${API_HOST_PORT}/api/v1/banks/statements/upload" || true)"
 echo "POST /banks/statements/upload → ${stmt_code}"
-if [[ "${stmt_code}" == "404" ]]; then
-  echo "Statements route missing in running container" >&2
+if [[ "${stmt_code}" != "401" && "${stmt_code}" != "422" && "${stmt_code}" != "400" ]]; then
+  echo "Statements route not healthy (got ${stmt_code:-empty})" >&2
   exit 1
 fi
 

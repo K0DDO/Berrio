@@ -409,30 +409,32 @@ class ReceiptService:
                         user_id=user_id, item=item, category_id=cat.id, create_rule=True
                     )
 
-        meta: dict = {}
+        confirm_meta: dict = {}
         if receipt.recognition_json:
             try:
-                meta = json.loads(receipt.recognition_json)
+                confirm_meta = json.loads(receipt.recognition_json)
             except json.JSONDecodeError:
-                meta = {}
+                confirm_meta = {}
         if body.date_ignored:
-            meta["date_ignored"] = True
+            confirm_meta["date_ignored"] = True
         if body.date_confirmed:
-            meta["date_confirmed"] = True
-        meta["confirmed_store"] = receipt.store_name
-        meta["confirmed_amount"] = str(receipt.total_amount) if receipt.total_amount else None
+            confirm_meta["date_confirmed"] = True
+        confirm_meta["confirmed_store"] = receipt.store_name
+        confirm_meta["confirmed_amount"] = (
+            str(receipt.total_amount) if receipt.total_amount else None
+        )
 
         if body.save_as_draft:
             receipt.status = ReceiptStatus.NEEDS_CONFIRMATION
-            meta["user_confirmed"] = False
-            meta["saved_as_draft"] = True
+            confirm_meta["user_confirmed"] = False
+            confirm_meta["saved_as_draft"] = True
             receipt.error_message = "Сохранено — можно исправить позже"
         else:
             receipt.status = ReceiptStatus.DONE
             receipt.error_message = None
-            meta["user_confirmed"] = True
+            confirm_meta["user_confirmed"] = True
 
-        receipt.recognition_json = json.dumps(meta, ensure_ascii=False, default=str)
+        receipt.recognition_json = json.dumps(confirm_meta, ensure_ascii=False, default=str)
 
         await self._repo.save(receipt)
         await self._audit.record(
@@ -517,7 +519,7 @@ class ReceiptService:
                 [data.store_name or "", *[i.name for i in data.items]],
             )
         )
-        purchased = None
+        purchased: ConfidenceField | None = None
         if data.purchased_at is not None:
             purchased = ConfidenceField(
                 value=data.purchased_at.isoformat(),

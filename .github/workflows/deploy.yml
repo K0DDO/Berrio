@@ -95,13 +95,13 @@ jobs:
             rollback
           fi
 
-          echo "==> Verify statements upload route (expect 401, not 404)"
+          echo "==> Verify statements upload route (expect 401/422, not 404)"
           stmt_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
             "http://127.0.0.1:${API_HOST_PORT}/api/v1/banks/statements/upload" || true)"
           echo "POST /banks/statements/upload → ${stmt_code}"
-          if [[ "${stmt_code}" == "404" ]]; then
-            echo "Statements route missing in running container" >&2
-            ${COMPOSE} exec -T api python -c "import pathlib; print(pathlib.Path('app/modules/banks/router.py').read_text()[:500])" || true
+          if [[ "${stmt_code}" != "401" && "${stmt_code}" != "422" && "${stmt_code}" != "400" ]]; then
+            echo "Statements route not healthy (got ${stmt_code:-empty})" >&2
+            ${COMPOSE} ps || true
             rollback
           fi
 
