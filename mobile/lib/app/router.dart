@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../features/ai/presentation/ai_screen.dart';
 import '../features/analytics/presentation/analytics_screen.dart';
+import '../features/auth/data/local_unlock_store.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
 import '../features/auth/presentation/splash_screen.dart';
+import '../features/auth/presentation/unlock_screen.dart';
+import '../features/banks/presentation/banks_screen.dart';
 import '../features/budgets/presentation/budgets_screen.dart';
 import '../features/family/presentation/family_screen.dart';
 import '../features/financial_health/presentation/financial_health_screen.dart';
@@ -15,6 +18,7 @@ import '../features/goals/presentation/goals_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
+import '../features/receipts/presentation/receipt_confirm_screen.dart';
 import '../features/receipts/presentation/receipts_history_screen.dart';
 import '../features/receipts/presentation/scan_receipt_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
@@ -26,6 +30,8 @@ final onboardingSeenProvider = StateProvider<bool?>((ref) => null);
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authControllerProvider);
   final onboardingSeen = ref.watch(onboardingSeenProvider);
+  final unlockConfig = ref.watch(unlockConfigProvider);
+  final sessionUnlocked = ref.watch(sessionUnlockedProvider);
 
   return GoRouter(
     initialLocation: '/splash',
@@ -36,8 +42,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc == '/register' ||
           loc == '/splash' ||
           loc == '/welcome';
+      final onUnlock = loc == '/unlock';
 
-      if (auth.status == AuthStatus.unknown || onboardingSeen == null) {
+      if (auth.status == AuthStatus.unknown ||
+          onboardingSeen == null ||
+          unlockConfig == null) {
         return loc == '/splash' ? null : '/splash';
       }
 
@@ -45,9 +54,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (!onboardingSeen) {
           return loc == '/welcome' ? null : '/welcome';
         }
-        if (loc == '/welcome' || loc == '/splash') return '/login';
+        if (loc == '/welcome' || loc == '/splash' || onUnlock) return '/login';
         return authGate && loc != '/splash' ? null : '/login';
       }
+
+      // Authenticated but local unlock required for this session.
+      final needsUnlock = unlockConfig.enabled && !sessionUnlocked;
+      if (needsUnlock) {
+        return onUnlock ? null : '/unlock';
+      }
+      if (onUnlock) return '/home';
 
       // Authenticated → dashboard (first launch after register included).
       if (authGate) return '/home';
@@ -58,6 +74,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/welcome', builder: (context, state) => const WelcomeScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
+      GoRoute(path: '/unlock', builder: (context, state) => const UnlockScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return AppShell(navigationShell: navigationShell);
@@ -110,6 +127,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     builder: (context, state) => const FamilyScreen(),
                   ),
                   GoRoute(
+                    path: 'banks',
+                    builder: (context, state) => const BanksScreen(),
+                  ),
+                  GoRoute(
                     path: 'receipts',
                     builder: (context, state) => const ReceiptsHistoryScreen(),
                   ),
@@ -128,6 +149,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ReceiptsHistoryScreen(),
         routes: [
           GoRoute(
+            path: ':id/confirm',
+            builder: (context, state) => ReceiptConfirmScreen(
+              receiptId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
             path: ':id',
             builder: (context, state) => ReceiptDetailsScreen(
               receiptId: state.pathParameters['id']!,
@@ -143,6 +170,8 @@ class _RouterListenable extends ChangeNotifier {
   _RouterListenable(this._ref) {
     _ref.listen(authControllerProvider, (_, __) => notifyListeners());
     _ref.listen(onboardingSeenProvider, (_, __) => notifyListeners());
+    _ref.listen(unlockConfigProvider, (_, __) => notifyListeners());
+    _ref.listen(sessionUnlockedProvider, (_, __) => notifyListeners());
   }
 
   final Ref _ref;
@@ -168,6 +197,11 @@ class _MoreHubScreen extends ConsumerWidget {
       ),
       (title: 'Budgets', path: '/more/budgets', icon: Icons.pie_chart_outline),
       (title: 'Family', path: '/more/family', icon: Icons.family_restroom),
+      (
+        title: 'Банки',
+        path: '/more/banks',
+        icon: Icons.account_balance_outlined,
+      ),
       (title: 'Receipts', path: '/receipts', icon: Icons.receipt_long),
       (title: 'Settings', path: '/more/settings', icon: Icons.settings_outlined),
     ];
@@ -178,7 +212,10 @@ class _MoreHubScreen extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: 'Sign out',
-            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
+            onPressed: () async {
+              await ref.read(authControllerProvider.notifier).logout();
+              ref.read(sessionUnlockedProvider.notifier).state = false;
+            },
             icon: const Icon(Icons.logout),
           ),
         ],

@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/analytics/data/analytics_api.dart';
 import '../features/budgets/data/budgets_api.dart';
+import '../features/financial_health/data/financial_health_api.dart';
 import '../features/goals/data/goals_api.dart';
 import '../features/home/data/dashboard_api.dart';
 import '../features/notifications/data/notifications_api.dart';
@@ -15,4 +17,6 @@ void refreshMoneySurfaces(WidgetRef ref) {
   ref.invalidate(goalsListProvider);
   ref.invalidate(budgetsListProvider);
   ref.invalidate(notificationsListProvider);
+  ref.invalidate(analyticsSummaryProvider);
+  ref.invalidate(financialHealthProvider);
 }

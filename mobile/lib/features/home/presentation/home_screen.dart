@@ -57,7 +57,10 @@ class HomeScreen extends ConsumerWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              _ScoreCard(score: dash.score),
+              _ScoreCard(
+                score: dash.score,
+                onTap: () => context.go('/more/health'),
+              ),
               const SizedBox(height: 12),
               _SpendCard(
                 current: dash.currentSpend,
@@ -103,58 +106,69 @@ class HomeScreen extends ConsumerWidget {
 }
 
 class _ScoreCard extends StatelessWidget {
-  const _ScoreCard({required this.score});
+  const _ScoreCard({required this.score, this.onTap});
 
   final int score;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return _CardShell(
-      child: Row(
-        children: [
-          SizedBox(
-            width: 72,
-            height: 72,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: score / 100,
-                  strokeWidth: 7,
-                  backgroundColor: scheme.primary.withValues(alpha: 0.12),
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 72,
+                height: 72,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: score / 100,
+                      strokeWidth: 7,
+                      backgroundColor: scheme.primary.withValues(alpha: 0.12),
+                    ),
+                    Text(
+                      '$score',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ],
                 ),
-                Text(
-                  '$score',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Financial Health',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Berrio Score 0–100 — how steady your money feels this month.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurface.withValues(alpha: 0.65),
+                          ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Icon(Icons.chevron_right, color: scheme.onSurface.withValues(alpha: 0.4)),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Financial Health',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Berrio Score 0–100 — how steady your money feels this month.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurface.withValues(alpha: 0.65),
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

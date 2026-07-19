@@ -11,6 +11,8 @@
 | Workers | Celery |
 | Infra | Docker Compose → VPS Linux |
 
+> Helper upgrade (confirm-first receipts, analytics, statements, biometric): see [helper-upgrade.md](helper-upgrade.md) and [api-receipts.md](api-receipts.md).
+
 ## High-level
 
 ```text

@@ -14,10 +14,12 @@ from app.modules.goals.router import router as goals_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.receipts.router import router as receipts_router
 from app.modules.reconciliation.router import router as reconciliation_router
+from app.modules.users.router import router as users_router
 
 api_router = APIRouter()
 api_router.include_router(system.router, tags=["system"])
 api_router.include_router(auth_router)
+api_router.include_router(users_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(receipts_router)
 api_router.include_router(categories_router)

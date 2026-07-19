@@ -19,6 +19,7 @@ from app.modules.families.models import (
 )
 from app.modules.financial_health.models import FinancialScore
 from app.modules.goals.models import FinancialGoal
+from app.modules.merchants.templates import MerchantReceiptTemplate
 from app.modules.notifications.models import Notification
 from app.modules.notifications.preferences import NotificationPreferences
 from app.modules.products.models import Product, ProductPriceHistory, ProductVariant
@@ -42,6 +43,7 @@ __all__ = [
     "FamilyPermission",
     "FinancialGoal",
     "FinancialScore",
+    "MerchantReceiptTemplate",
     "Notification",
     "NotificationPreferences",
     "PasswordResetToken",
