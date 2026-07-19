@@ -8,7 +8,7 @@ Avoids shaming food spend when income is low.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -21,6 +21,9 @@ from app.modules.categories.models import Category
 from app.modules.financial_health.models import FinancialScore
 from app.modules.receipts.models import Receipt, ReceiptStatus
 from app.modules.users.models import User
+
+# Avoid writing a score row on every analytics/health GET.
+_SCORE_WRITE_DEBOUNCE = timedelta(hours=6)
 
 _FOOD_HINTS = ("еда", "продукт", "food", "cafe", "grocery", "dairy", "delivery")
 _ENTERTAIN_HINTS = ("развлеч", "entertainment", "кофе", "cafe")
@@ -169,18 +172,39 @@ class FinancialHealthService:
         }
 
         if self._session is not None:
-            row = FinancialScore(
-                id=uuid4(),
-                user_id=user_id,
-                score=score,
-                period_start=datetime.now(UTC).date(),
-                period_end=datetime.now(UTC).date(),
-                factors=factors,
-            )
-            self._session.add(row)
-            await self._session.flush()
+            await self._maybe_persist_score(user_id, score, factors)
 
         return FinancialHealthResult(user_id=user_id, score=score, factors=factors)
+
+    async def _maybe_persist_score(
+        self, user_id: UUID, score: int, factors: dict[str, Any]
+    ) -> None:
+        assert self._session is not None
+        now = datetime.now(UTC)
+        recent = await self._session.scalar(
+            select(FinancialScore)
+            .where(FinancialScore.user_id == user_id)
+            .order_by(FinancialScore.created_at.desc())
+            .limit(1)
+        )
+        if recent is not None and recent.created_at is not None:
+            created = recent.created_at
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=UTC)
+            if now - created < _SCORE_WRITE_DEBOUNCE and recent.score == score:
+                return
+        today = now.date()
+        month_start = today.replace(day=1)
+        row = FinancialScore(
+            id=uuid4(),
+            user_id=user_id,
+            score=score,
+            period_start=month_start,
+            period_end=today,
+            factors=factors,
+        )
+        self._session.add(row)
+        await self._session.flush()
 
     async def _category_shares(self, receipts: list, spend: Decimal) -> dict[str, float]:
         if spend <= 0 or not receipts:
@@ -220,15 +244,24 @@ class FinancialHealthService:
         return {k: float(v / spend) for k, v in buckets.items() if v > 0}
 
     async def _load_month_spend(self, user_id: UUID) -> tuple[list, Decimal]:
+        """Load DONE receipts for the current calendar month (UTC)."""
         assert self._session is not None
+        now = datetime.now(UTC)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         result = await self._session.execute(
             select(Receipt)
             .options(selectinload(Receipt.items))
             .where(Receipt.user_id == user_id, Receipt.status == ReceiptStatus.DONE)
         )
-        receipts = list(result.scalars().all())
+        receipts: list = []
         total = Decimal("0")
-        for receipt in receipts:
+        for receipt in result.scalars().all():
+            ts = receipt.purchased_at or receipt.created_at
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=UTC)
+            if ts < month_start or ts > now:
+                continue
+            receipts.append(receipt)
             for item in receipt.items:
                 total += item.sum or Decimal("0")
         return receipts, total

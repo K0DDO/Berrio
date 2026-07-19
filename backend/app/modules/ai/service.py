@@ -206,33 +206,49 @@ class AiService:
         return out
 
     async def monthly_review(self, user_id: UUID) -> AiInsightOut:
-        """Secondary monthly narrative built only from analytics facts."""
+        """Secondary monthly narrative: facts → Kimi (or stub) → persist."""
         from app.core.config import get_settings
 
         summary = await self._analytics.summary(user_id, period="month")
         factors = summary.score_factors or {}
-        lines = [f"За месяц потрачено {summary.total_spend} ₽ ({summary.receipt_count} чеков)."]
+        fact_lines = [
+            f"За месяц потрачено {summary.total_spend} ₽ ({summary.receipt_count} чеков)."
+        ]
         if summary.avg_receipt is not None:
-            lines.append(f"Средний чек: {summary.avg_receipt} ₽.")
+            fact_lines.append(f"Средний чек: {summary.avg_receipt} ₽.")
         if summary.by_category:
-            lines.append("Основные статьи:")
+            fact_lines.append("Основные статьи:")
             for cat in summary.by_category[:5]:
-                lines.append(f"• {cat.category_name}: {cat.amount} ₽ ({cat.share:.0%})")
+                fact_lines.append(f"• {cat.category_name}: {cat.amount} ₽ ({cat.share:.0%})")
         merchants = getattr(summary, "top_merchants", None) or []
         if merchants:
-            lines.append("Куда уходят деньги:")
+            fact_lines.append("Куда уходят деньги:")
             for m in merchants[:5]:
-                lines.append(f"• {m.store_name}: {m.purchase_count} пок. / {m.amount} ₽")
+                fact_lines.append(f"• {m.store_name}: {m.purchase_count} пок. / {m.amount} ₽")
         for p in factors.get("positive") or []:
-            lines.append(f"+ {p}")
+            fact_lines.append(f"+ {p}")
         for n in factors.get("negative") or []:
-            lines.append(f"− {n}")
+            fact_lines.append(f"− {n}")
         if summary.berrio_score is not None:
-            lines.append(f"Berrio Score: {summary.berrio_score}/100.")
+            fact_lines.append(f"Berrio Score: {summary.berrio_score}/100.")
+
+        facts = "\n".join(fact_lines)
         provider = "kimi" if get_settings().kimi_api_key else "stub"
-        body = "\n".join(lines)
-        if provider == "stub":
+        try:
+            body = await self._client.complete(
+                system=SYSTEM_PROMPT,
+                user=(
+                    "Составь спокойный разбор месяца на русском (6–10 предложений). "
+                    "Только факты из контекста, без выдуманных сумм.\n\n"
+                    f"Контекст:\n{facts}"
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            body = facts
+            provider = "stub"
+        if provider == "stub" and not body.startswith("[Локальный режим]"):
             body = "[Локальный режим]\n" + body
+
         row = AiInsight(
             user_id=user_id,
             period="month",
