@@ -6,6 +6,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Berrio needs camera access to scan fiscal QR codes on receipts. Photos are never stored.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Berrio uses Face ID for quick unlock. Your account password is never stored.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Berrio does not store receipt photos; gallery access is unused by default.</string>
 	<key>CFBundleDevelopmentRegion</key>

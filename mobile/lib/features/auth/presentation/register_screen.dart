@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/local_unlock_store.dart';
 import 'auth_controller.dart';
+import 'unlock_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -32,7 +34,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           password: _password.text,
           displayName: _name.text.trim(),
         );
-    if (mounted) setState(() => _loading = false);
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    final auth = ref.read(authControllerProvider);
+    if (auth.status != AuthStatus.authenticated) return;
+
+    final unlock = ref.read(unlockConfigProvider);
+    if (unlock != null && unlock.enabled) return;
+    await offerQuickUnlockDialog(context, ref);
   }
 
   @override

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router.dart';
 import '../../../core/storage/secure_token_store.dart';
+import '../data/local_unlock_store.dart';
 import 'auth_controller.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -22,6 +23,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   Future<void> _bootstrap() async {
     final seen = await ref.read(secureTokenStoreProvider).hasSeenOnboarding();
     ref.read(onboardingSeenProvider.notifier).state = seen;
+
+    final unlock = await ref.read(localUnlockStoreProvider).readConfig();
+    ref.read(unlockConfigProvider.notifier).state = unlock;
+    // If unlock is off, this session is already open.
+    if (!unlock.enabled) {
+      ref.read(sessionUnlockedProvider.notifier).state = true;
+    }
+
     await ref.read(authControllerProvider.notifier).bootstrap();
   }
 

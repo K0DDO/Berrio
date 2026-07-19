@@ -107,6 +107,8 @@ class AuthService:
         if needs_rehash(user.password_hash):
             user.password_hash = hash_password(data.password)
 
+        user.last_login_at = datetime.now(UTC)
+
         tokens = await self._issue_token_pair(
             user,
             device_id=data.device_id,
