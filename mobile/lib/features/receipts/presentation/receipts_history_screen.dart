@@ -206,9 +206,16 @@ class ReceiptDetailsScreen extends ConsumerWidget {
                   elevation: 0,
                   color: Colors.white,
                   child: ListTile(
-                    title: Text(i.nameRaw),
+                    title: Text(
+                      (i.nameDisplay?.trim().isNotEmpty == true)
+                          ? i.nameDisplay!
+                          : i.nameRaw,
+                    ),
                     subtitle: Text(
                       [
+                        if (i.nameDisplay?.trim().isNotEmpty == true &&
+                            i.nameDisplay!.trim() != i.nameRaw.trim())
+                          i.nameRaw,
                         if (i.categoryName != null) i.categoryName!,
                         if (priceNote != null) priceNote,
                       ].join(' · '),

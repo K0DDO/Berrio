@@ -11,11 +11,17 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
 
+# Article / SKU markers: «№12345», «N 987654», bare long digit runs (EAN-8/13).
 _ARTICLE_RE = re.compile(
-    r"(?:^|\s)(?:№|N[oо]?\.?|#)\s*\d{4,}\b|\b\d{8,}\b",
+    r"(?:^|\s)(?:№|N[oо]?\.?|#)\s*\d{3,}\b|\b\d{8,14}\b",
     re.IGNORECASE,
 )
-_LEADING_ZEROS_SKU = re.compile(r"^\d{6,}\s+")
+# Leading SKU / barcode glued to product name: «4607001234567 МОЛОКО»
+_LEADING_ZEROS_SKU = re.compile(r"^\d{6,14}\s+")
+# Trailing barcode or PLU after name
+_TRAILING_SKU = re.compile(r"\s+\d{6,14}\s*$")
+# Internal EAN-like token surrounded by spaces (keep short weights like «900»)
+_INTERNAL_EAN = re.compile(r"(?<=\s)\d{8,14}(?=\s)")
 _FAT_RE = re.compile(r"(\d+[.,]?\d*)\s*%")
 _VOLUME_RE = re.compile(
     r"(?P<num>\d+[.,]?\d*)\s*(?P<unit>мл|ml|л|l|г|g|кг|kg)\b",
@@ -77,6 +83,8 @@ class LineItemNormalizer:
 
         cleaned = _ARTICLE_RE.sub(" ", text)
         cleaned = _LEADING_ZEROS_SKU.sub("", cleaned)
+        cleaned = _TRAILING_SKU.sub("", cleaned)
+        cleaned = _INTERNAL_EAN.sub(" ", cleaned)
         cleaned = cleaned.replace("*", " ").replace("_", " ")
         cleaned = _MULTI_SPACE.sub(" ", cleaned).strip()
 
