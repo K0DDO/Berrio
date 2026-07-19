@@ -60,6 +60,18 @@ async def ai_insights(
     return result
 
 
+@router.get("/monthly-review", response_model=AiInsightOut)
+async def ai_monthly_review(
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AiInsightOut:
+    """Secondary monthly narrative — facts only, no invented numbers."""
+    service = AiService(session)
+    result = await service.monthly_review(user_id)
+    await session.commit()
+    return result
+
+
 @router.post("/insights/{insight_id}/feedback", response_model=AiFeedbackOut)
 async def ai_insight_feedback(
     insight_id: UUID,

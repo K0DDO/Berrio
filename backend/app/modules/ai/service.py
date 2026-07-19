@@ -59,7 +59,10 @@ class AiFeedbackOut(BaseModel):
 
 SYSTEM_PROMPT = (
     "Ты Berrio — спокойный AI-экономист. Объясняй просто, без стыда за траты. "
-    "Опирайся на факты из контекста пользователя. Отвечай на русском."
+    "Используй ТОЛЬКО факты из блока «Контекст». Не выдумывай суммы, магазины и проценты. "
+    "Если дохода мало и еда занимает большую долю — не советуй «экономить на еде»; "
+    "скажи, что узкое место скорее в уровне дохода. "
+    "Если данных мало — честно скажи, чего не хватает. Отвечай на русском."
 )
 
 
@@ -123,32 +126,48 @@ class AiService:
 
         summary = await self._analytics.summary(user_id, period=period)
         drafts: list[AiInsightOut] = []
+        factors = summary.score_factors or {}
+        income = factors.get("income")
         if summary.total_spend > 0 and summary.by_category:
             lines = []
             for cat in summary.by_category[:5]:
                 lines.append(f"{cat.category_name} {cat.share:.0%}")
             cats_block = "\n".join(lines)
-            tip_amount = (summary.by_category[0].amount * Decimal("0.1")).quantize(Decimal("1"))
-            tip_name = summary.by_category[0].category_name.lower()
+            top = summary.by_category[0]
+            if income and Decimal(str(income)) < Decimal("60000") and top.share >= 0.35:
+                advice = (
+                    f"«{top.category_name}» — крупная статья ({top.share:.0%}). "
+                    "При текущем доходе это скорее сигнал про уровень заработка, "
+                    "а не про «лишние» траты."
+                )
+            else:
+                tip_amount = (top.amount * Decimal("0.1")).quantize(Decimal("1"))
+                advice = (
+                    f"Можно точечно пересмотреть «{top.category_name.lower()}» "
+                    f"(ориентир экономии ~{tip_amount} ₽), если это необязательные покупки."
+                )
             drafts.append(
                 AiInsightOut(
-                    title="Первый разбор трат",
+                    title="Разбор трат за период",
                     body=(
-                        f"За последние 30 дней ваши расходы:\n"
-                        f"{summary.total_spend}₽\n\n"
+                        f"Расходы: {summary.total_spend} ₽\n\n"
                         f"Основные категории:\n{cats_block}\n\n"
-                        f"Рекомендация:\nможно сократить «{tip_name}» примерно на {tip_amount}₽"
+                        f"Рекомендация:\n{advice}"
                     ),
                     kind="first_insight",
                 )
             )
-        if summary.by_category and not any(i.kind == "first_insight" for i in drafts):
-            top = summary.by_category[0]
+        merchants = getattr(summary, "top_merchants", None) or []
+        if merchants:
+            m = merchants[0]
             drafts.append(
                 AiInsightOut(
-                    title="Главная категория расходов",
-                    body=f"{top.category_name} — {top.amount} ₽ ({top.share:.0%} за период).",
-                    kind="spend_focus",
+                    title="Куда уходят деньги",
+                    body=(
+                        f"{m.store_name}: {m.purchase_count} покупок на {m.amount} ₽ "
+                        f"за период «{summary.period}»."
+                    ),
+                    kind="merchants",
                 )
             )
         if summary.berrio_score is not None:
@@ -185,6 +204,49 @@ class AiService:
             await self._session.flush()
             out.append(AiInsightOut(id=row.id, title=row.title, body=row.body, kind=row.kind))
         return out
+
+    async def monthly_review(self, user_id: UUID) -> AiInsightOut:
+        """Secondary monthly narrative built only from analytics facts."""
+        from app.core.config import get_settings
+
+        summary = await self._analytics.summary(user_id, period="month")
+        factors = summary.score_factors or {}
+        lines = [f"За месяц потрачено {summary.total_spend} ₽ ({summary.receipt_count} чеков)."]
+        if summary.avg_receipt is not None:
+            lines.append(f"Средний чек: {summary.avg_receipt} ₽.")
+        if summary.by_category:
+            lines.append("Основные статьи:")
+            for cat in summary.by_category[:5]:
+                lines.append(f"• {cat.category_name}: {cat.amount} ₽ ({cat.share:.0%})")
+        merchants = getattr(summary, "top_merchants", None) or []
+        if merchants:
+            lines.append("Куда уходят деньги:")
+            for m in merchants[:5]:
+                lines.append(f"• {m.store_name}: {m.purchase_count} пок. / {m.amount} ₽")
+        for p in factors.get("positive") or []:
+            lines.append(f"+ {p}")
+        for n in factors.get("negative") or []:
+            lines.append(f"− {n}")
+        if summary.berrio_score is not None:
+            lines.append(f"Berrio Score: {summary.berrio_score}/100.")
+        provider = "kimi" if get_settings().kimi_api_key else "stub"
+        body = "\n".join(lines)
+        if provider == "stub":
+            body = "[Локальный режим]\n" + body
+        row = AiInsight(
+            user_id=user_id,
+            period="month",
+            kind="monthly_review",
+            title="Разбор месяца",
+            body=body,
+            payload_json=json.dumps(
+                {"provider": provider, "total_spend": str(summary.total_spend)},
+                ensure_ascii=False,
+            ),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return AiInsightOut(id=row.id, title=row.title, body=row.body, kind=row.kind)
 
     async def submit_feedback(
         self,
@@ -231,13 +293,26 @@ class AiService:
     @staticmethod
     def _build_context(summary) -> str:
         top = (
-            ", ".join(f"{c.category_name}: {c.amount}" for c in summary.by_category[:5])
+            ", ".join(
+                f"{c.category_name}: {c.amount} ({c.share:.0%})" for c in summary.by_category[:5]
+            )
             or "нет данных"
         )
+        merchants = ""
+        if getattr(summary, "top_merchants", None):
+            merchants = "; ".join(
+                f"{m.store_name}: {m.purchase_count} пок. / {m.amount} ₽"
+                for m in summary.top_merchants[:5]
+            )
+        factors = summary.score_factors or {}
+        income = factors.get("income")
         return (
-            f"Период: {summary.period}. Сумма расходов: {summary.total_spend}. "
-            f"Чеков: {summary.receipt_count}. Berrio Score: {summary.berrio_score}. "
-            f"Топ категорий: {top}. Факторы: {summary.score_factors}."
+            f"Период: {summary.period}. Расходы: {summary.total_spend} ₽. "
+            f"Чеков: {summary.receipt_count}. Средний чек: {getattr(summary, 'avg_receipt', None)}. "
+            f"Доход (если указан): {income}. Berrio Score: {summary.berrio_score}. "
+            f"Топ категорий: {top}. "
+            f"Куда уходят деньги (магазины): {merchants or 'нет'}. "
+            f"Плюсы: {factors.get('positive')}. Минусы: {factors.get('negative')}."
         )
 
     @staticmethod

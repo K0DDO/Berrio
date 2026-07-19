@@ -38,6 +38,11 @@ class AiApi {
         .toList();
   }
 
+  Future<AiInsightDto> monthlyReview() async {
+    final res = await _dio.get<Map<String, dynamic>>('/ai/monthly-review');
+    return AiInsightDto.fromJson(res.data!);
+  }
+
   Future<void> feedback(String insightId, {required bool helpful}) async {
     await _dio.post(
       '/ai/insights/$insightId/feedback',
@@ -63,6 +68,11 @@ class AiScreen extends ConsumerWidget {
         title: const Text('AI Economist'),
         actions: [
           IconButton(
+            tooltip: 'Разбор месяца',
+            onPressed: () => _showMonthlyReview(context, ref),
+            icon: const Icon(Icons.calendar_month_outlined),
+          ),
+          IconButton(
             onPressed: () => ref.invalidate(aiInsightsProvider),
             icon: const Icon(Icons.refresh),
           ),
@@ -79,16 +89,25 @@ class AiScreen extends ConsumerWidget {
             return JourneyStatePanel.empty(
               title: 'No insights yet',
               message: 'Scan a few receipts — Berrio will explain your spending.',
+              actionLabel: 'Разбор месяца',
+              onAction: () => _showMonthlyReview(context, ref),
             );
           }
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            itemCount: items.length,
+            itemCount: items.length + 1,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final item = items[index];
+              if (index == 0) {
+                return OutlinedButton.icon(
+                  onPressed: () => _showMonthlyReview(context, ref),
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: const Text('Разбор месяца (вторично)'),
+                );
+              }
+              final item = items[index - 1];
               return Material(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(16),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -143,5 +162,32 @@ class AiScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  Future<void> _showMonthlyReview(BuildContext context, WidgetRef ref) async {
+    try {
+      final review = await ref.read(aiApiProvider).monthlyReview();
+      if (!context.mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(review.title, style: Theme.of(ctx).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                Text(review.body),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 }

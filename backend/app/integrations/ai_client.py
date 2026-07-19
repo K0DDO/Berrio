@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import time
 from typing import Protocol
 
+import structlog
+
 from app.core.config import get_settings
+
+logger = structlog.get_logger(__name__)
 
 
 class AiClient(Protocol):
@@ -10,28 +15,34 @@ class AiClient(Protocol):
 
 
 class StubAiClient:
-    """Deterministic local economist — used when KIMI_API_KEY is unset."""
+    """Deterministic local economist — used when KIMI_API_KEY is unset.
+
+    Explicitly labels itself; does not invent deep personal analysis.
+    """
 
     async def complete(self, *, system: str, user: str) -> str:
         _ = system
+        logger.info("ai.request", provider="stub", user_chars=len(user))
         lower = user.lower()
-        if "ноутбук" in lower or "laptop" in lower:
-            return (
-                "При текущих тратах лучше сначала зафиксировать цель накопления. "
-                "Если откладывать 10–15% свободного бюджета, покупка станет реалистичнее за несколько месяцев. "
-                "Могу помочь разложить расходы и найти необязательные категории."
+        if "доход" in lower and ("мал" in lower or "низк" in lower):
+            reply = (
+                "[Локальный режим] При небольшом доходе фокус не на «срезать еду», "
+                "а на росте заработка и обязательных платежах. "
+                "Пришлите цифры дохода и категорий — разберём точнее после подключения Kimi."
             )
-        if "кофе" in lower or "доставк" in lower:
-            return (
-                "Необязательные расходы (кофе/доставка) часто растут незаметно. "
-                "Сокращение на 20% обычно даёт ощутимую экономию без жёстких ограничений. "
-                "Сверьтесь с аналитикой за месяц по категориям."
+        elif "ноутбук" in lower or "laptop" in lower:
+            reply = (
+                "[Локальный режим] Для крупной покупки зафиксируйте цель накопления "
+                "и долю свободного бюджета. Без ключа Kimi это общий совет, не персональный разбор."
             )
-        return (
-            "Я Berrio AI — ваш финансовый экономист. "
-            "Покажите период или задайте вопрос о тратах, целях или покупке. "
-            "Рекомендации опираются на ваши чеки и категории."
-        )
+        else:
+            reply = (
+                "[Локальный режим] KIMI_API_KEY не задан — ответы шаблонные. "
+                "Опирайтесь на экран аналитики: категории, магазины и Berrio Score. "
+                "Задайте вопрос после настройки Kimi для персонального разбора."
+            )
+        logger.info("ai.response", provider="stub", reply_chars=len(reply))
+        return reply
 
 
 class KimiAiClient:
@@ -45,22 +56,46 @@ class KimiAiClient:
     async def complete(self, *, system: str, user: str) -> str:
         import httpx
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self._base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                json={
-                    "model": self._model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "temperature": 0.4,
-                },
+        started = time.perf_counter()
+        logger.info(
+            "ai.request",
+            provider="kimi",
+            model=self._model,
+            system_chars=len(system),
+            user_chars=len(user),
+        )
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self._base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    json={
+                        "model": self._model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        "temperature": 0.3,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                reply = data["choices"][0]["message"]["content"]
+            logger.info(
+                "ai.response",
+                provider="kimi",
+                reply_chars=len(reply),
+                latency_ms=int((time.perf_counter() - started) * 1000),
             )
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+            return reply
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "ai.error",
+                provider="kimi",
+                error=type(exc).__name__,
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
+            raise
 
 
 def get_ai_client() -> AiClient:
