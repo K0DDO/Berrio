@@ -59,7 +59,7 @@ class _BanksScreenState extends ConsumerState<BanksScreen> {
       _error = null;
       _messages = const [];
     });
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['pdf', 'csv', 'xlsx', 'xls'],
       withData: false,

@@ -26,7 +26,8 @@ dependencies:
   uuid: ^4.5.1
   local_auth: ^3.0.2
   crypto: ^3.0.7
-  file_picker: ^11.0.2
+  # 11.0.x breaks Android builds (FilePickerPlugin symbol missing under AGP 9).
+  file_picker: 10.3.10
   google_mlkit_text_recognition: ^0.15.0
 
 dev_dependencies:
