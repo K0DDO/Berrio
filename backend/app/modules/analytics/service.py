@@ -45,20 +45,24 @@ class AnalyticsSummaryOut(BaseModel):
 
 
 def _period_bounds(period: str) -> tuple[datetime | None, datetime | None]:
+    """Calendar day / week / month / year (UTC), not rolling windows."""
     now = datetime.now(UTC)
     end = now
     if period == "day":
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
-        start = now - timedelta(days=7)
+        # Monday 00:00 UTC of the current ISO week
+        start = (now - timedelta(days=now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
     elif period == "month":
-        start = now - timedelta(days=30)
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif period == "year":
-        start = now - timedelta(days=365)
+        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     elif period == "all":
         return None, None
     else:
-        start = now - timedelta(days=30)
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return start, end
 
 
@@ -67,8 +71,35 @@ def _previous_bounds(
 ) -> tuple[datetime | None, datetime | None]:
     if start is None or end is None:
         return None, None
+    if period == "day":
+        prev_start = start - timedelta(days=1)
+        return prev_start, start
+    if period == "week":
+        prev_start = start - timedelta(days=7)
+        return prev_start, start
+    if period == "month":
+        # Previous calendar month
+        first_this = start
+        last_prev = first_this - timedelta(seconds=1)
+        prev_start = last_prev.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return prev_start, first_this
+    if period == "year":
+        prev_start = start.replace(year=start.year - 1)
+        return prev_start, start
     delta = end - start
     return start - delta, start
+
+
+class DaySpendOut(BaseModel):
+    day: date
+    amount: Decimal
+
+
+class AnalyticsTimeseriesOut(BaseModel):
+    period: str
+    period_start: date | None
+    period_end: date | None
+    points: list[DaySpendOut]
 
 
 class AnalyticsService:
@@ -173,6 +204,66 @@ class AnalyticsService:
             top_merchants=top_merchants,
             berrio_score=health.score,
             score_factors=health.factors,
+        )
+
+    async def timeseries(
+        self,
+        user_id: UUID,
+        *,
+        period: str = "month",
+        scope_user_ids: list[UUID] | None = None,
+    ) -> AnalyticsTimeseriesOut:
+        start, end = _period_bounds(period)
+        ids = scope_user_ids or [user_id]
+        result = await self._session.execute(
+            select(Receipt)
+            .options(selectinload(Receipt.items))
+            .where(
+                Receipt.user_id.in_(ids),
+                Receipt.status == ReceiptStatus.DONE,
+            )
+        )
+        receipts = self._filter_period(list(result.scalars().all()), start, end)
+        by_day: dict[date, Decimal] = {}
+        for receipt in receipts:
+            ts = receipt.purchased_at or receipt.created_at
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=UTC)
+            day = ts.date()
+            day_sum = Decimal("0")
+            for item in receipt.items:
+                day_sum += item.sum or Decimal("0")
+            if receipt.total_amount is not None and day_sum == 0:
+                day_sum = receipt.total_amount
+            by_day[day] = by_day.get(day, Decimal("0")) + day_sum
+
+        # Fill empty days in the window for a continuous sparkline.
+        points: list[DaySpendOut] = []
+        if start is not None:
+            cursor = start.date()
+            last = (end or datetime.now(UTC)).date()
+            while cursor <= last:
+                points.append(
+                    DaySpendOut(
+                        day=cursor,
+                        amount=by_day.get(cursor, Decimal("0")).quantize(Decimal("0.01")),
+                    )
+                )
+                cursor += timedelta(days=1)
+        else:
+            for day in sorted(by_day):
+                points.append(
+                    DaySpendOut(
+                        day=day,
+                        amount=by_day[day].quantize(Decimal("0.01")),
+                    )
+                )
+
+        return AnalyticsTimeseriesOut(
+            period=period,
+            period_start=start.date() if start else None,
+            period_end=end.date() if end else None,
+            points=points,
         )
 
     @staticmethod

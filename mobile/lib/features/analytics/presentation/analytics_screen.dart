@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +21,7 @@ class AnalyticsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final period = ref.watch(analyticsPeriodProvider);
     final async = ref.watch(analyticsSummaryProvider);
+    final seriesAsync = ref.watch(analyticsTimeseriesProvider);
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -46,10 +49,16 @@ class AnalyticsScreen extends ConsumerWidget {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => JourneyStatePanel.error(
                 message: '$e',
-                onRetry: () => ref.invalidate(analyticsSummaryProvider),
+                onRetry: () {
+                  ref.invalidate(analyticsSummaryProvider);
+                  ref.invalidate(analyticsTimeseriesProvider);
+                },
               ),
               data: (summary) => RefreshIndicator(
-                onRefresh: () async => ref.invalidate(analyticsSummaryProvider),
+                onRefresh: () async {
+                  ref.invalidate(analyticsSummaryProvider);
+                  ref.invalidate(analyticsTimeseriesProvider);
+                },
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -89,6 +98,29 @@ class AnalyticsScreen extends ConsumerWidget {
                               '${summary.receiptCount} чеков'
                               '${summary.avgReceipt != null ? ' · средний ${summary.avgReceipt} ₽' : ''}',
                               style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            seriesAsync.when(
+                              loading: () => const SizedBox(height: 56),
+                              error: (_, __) => const SizedBox.shrink(),
+                              data: (points) {
+                                if (points.every((v) => v <= 0)) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 16),
+                                  child: SizedBox(
+                                    height: 56,
+                                    width: double.infinity,
+                                    child: CustomPaint(
+                                      painter: _SparklinePainter(
+                                        values: points,
+                                        color: scheme.primary,
+                                        fill: scheme.primary.withValues(alpha: 0.12),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -212,5 +244,66 @@ class AnalyticsScreen extends ConsumerWidget {
     if (pct > 0) return '▲ $abs% к прошлому периоду';
     if (pct < 0) return '▼ $abs% к прошлому периоду';
     return 'Без изменений к прошлому периоду';
+  }
+}
+
+class _SparklinePainter extends CustomPainter {
+  _SparklinePainter({
+    required this.values,
+    required this.color,
+    required this.fill,
+  });
+
+  final List<double> values;
+  final Color color;
+  final Color fill;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty || size.width <= 0 || size.height <= 0) return;
+    final maxV = values.reduce(math.max);
+    final minV = values.reduce(math.min);
+    final span = (maxV - minV).abs() < 1e-9 ? 1.0 : (maxV - minV);
+    final dx = values.length == 1 ? 0.0 : size.width / (values.length - 1);
+
+    final line = Path();
+    final area = Path();
+    for (var i = 0; i < values.length; i++) {
+      final x = i * dx;
+      final y = size.height - ((values[i] - minV) / span) * (size.height - 4) - 2;
+      if (i == 0) {
+        line.moveTo(x, y);
+        area.moveTo(x, size.height);
+        area.lineTo(x, y);
+      } else {
+        line.lineTo(x, y);
+        area.lineTo(x, y);
+      }
+    }
+    area.lineTo((values.length - 1) * dx, size.height);
+    area.close();
+
+    canvas.drawPath(
+      area,
+      Paint()
+        ..style = PaintingStyle.fill
+        ..color = fill,
+    );
+    canvas.drawPath(
+      line,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = color
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparklinePainter oldDelegate) {
+    return oldDelegate.values != values ||
+        oldDelegate.color != color ||
+        oldDelegate.fill != fill;
   }
 }

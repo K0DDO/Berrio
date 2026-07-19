@@ -130,6 +130,17 @@ class AnalyticsApi {
     );
     return AnalyticsSummaryDto.fromJson(response.data!);
   }
+
+  Future<List<double>> timeseries({required String period}) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/analytics/timeseries',
+      queryParameters: {'period': period},
+    );
+    final points = response.data?['points'] as List<dynamic>? ?? [];
+    return points
+        .map((e) => double.tryParse('${(e as Map)['amount']}') ?? 0.0)
+        .toList();
+  }
 }
 
 final analyticsApiProvider = Provider<AnalyticsApi>((ref) {
@@ -143,4 +154,10 @@ final analyticsSummaryProvider =
     FutureProvider.autoDispose<AnalyticsSummaryDto>((ref) {
   final period = ref.watch(analyticsPeriodProvider);
   return ref.watch(analyticsApiProvider).summary(period: period);
+});
+
+final analyticsTimeseriesProvider =
+    FutureProvider.autoDispose<List<double>>((ref) {
+  final period = ref.watch(analyticsPeriodProvider);
+  return ref.watch(analyticsApiProvider).timeseries(period: period);
 });
