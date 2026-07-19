@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/widgets/journey_state_panel.dart';
 import '../data/notifications_api.dart';
 import '../../sync/sync_providers.dart';
 
@@ -15,10 +16,10 @@ class NotificationsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: const Text('Уведомления'),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'Обновить',
             onPressed: () => ref.invalidate(notificationsListProvider),
             icon: const Icon(Icons.refresh),
           ),
@@ -26,17 +27,16 @@ class NotificationsScreen extends ConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Failed: $e')),
+        error: (e, _) => JourneyStatePanel.error(
+          message: '$e',
+          onRetry: () => ref.invalidate(notificationsListProvider),
+        ),
         data: (items) {
           if (items.isEmpty) {
-            return Center(
-              child: Text(
-                'No alerts yet.\nBerrio will explain money events here.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: scheme.onSurface.withValues(alpha: 0.6),
-                    ),
-              ),
+            return JourneyStatePanel.empty(
+              title: 'Пока тихо',
+              message:
+                  'Здесь появятся понятные алерты: бюджет, цены, цели и необычные траты.',
             );
           }
           return ListView.separated(

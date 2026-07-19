@@ -65,7 +65,7 @@ class AiScreen extends ConsumerWidget {
     final async = ref.watch(aiInsightsProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Economist'),
+        title: const Text('ИИ-экономист'),
         actions: [
           IconButton(
             tooltip: 'Разбор месяца',

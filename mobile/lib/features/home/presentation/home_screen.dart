@@ -29,7 +29,7 @@ class HomeScreen extends ConsumerWidget {
                   ),
             ),
             Text(
-              user == null ? 'Your money, explained' : user.displayName,
+              user == null ? 'Деньги под контролем' : user.displayName,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -95,7 +95,7 @@ class HomeScreen extends ConsumerWidget {
               FilledButton.tonalIcon(
                 onPressed: () => context.go('/scan'),
                 icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Scan a receipt'),
+                label: const Text('Сканировать чек'),
               ),
             ],
           ),

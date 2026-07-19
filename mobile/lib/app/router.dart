@@ -184,9 +184,9 @@ class _MoreHubScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider).user;
     final items = <({String title, String path, IconData icon})>[
-      (title: 'Goals', path: '/more/goals', icon: Icons.flag_outlined),
+      (title: 'Цели', path: '/more/goals', icon: Icons.flag_outlined),
       (
-        title: 'Notifications',
+        title: 'Уведомления',
         path: '/more/notifications',
         icon: Icons.notifications_outlined,
       ),
@@ -195,23 +195,23 @@ class _MoreHubScreen extends ConsumerWidget {
         path: '/more/health',
         icon: Icons.favorite_outline,
       ),
-      (title: 'Budgets', path: '/more/budgets', icon: Icons.pie_chart_outline),
-      (title: 'Family', path: '/more/family', icon: Icons.family_restroom),
+      (title: 'Бюджеты', path: '/more/budgets', icon: Icons.pie_chart_outline),
+      (title: 'Семья', path: '/more/family', icon: Icons.family_restroom),
       (
         title: 'Банки',
         path: '/more/banks',
         icon: Icons.account_balance_outlined,
       ),
-      (title: 'Receipts', path: '/receipts', icon: Icons.receipt_long),
-      (title: 'Settings', path: '/more/settings', icon: Icons.settings_outlined),
+      (title: 'Чеки', path: '/receipts', icon: Icons.receipt_long),
+      (title: 'Настройки', path: '/more/settings', icon: Icons.settings_outlined),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('More'),
+        title: const Text('Ещё'),
         actions: [
           IconButton(
-            tooltip: 'Sign out',
+            tooltip: 'Выйти',
             onPressed: () async {
               await ref.read(authControllerProvider.notifier).logout();
               ref.read(sessionUnlockedProvider.notifier).state = false;

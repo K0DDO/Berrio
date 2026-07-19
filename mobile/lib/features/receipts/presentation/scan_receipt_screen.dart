@@ -538,15 +538,6 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
                       icon: const Icon(Icons.paste_outlined),
                       label: const Text('Вставить текст чека'),
                     ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => _handleRaw(
-                        't=20240115T1200&s=250.00&fn=9281000100123456&i=12345&fp=987654321&n=1',
-                        syncNow: false,
-                      ),
-                      icon: const Icon(Icons.cloud_off),
-                      label: const Text('Save without sync (test)'),
-                    ),
                   ],
                   if (_phase == ScanPhase.success) ...[
                     if (_receiptId != null)
@@ -560,7 +551,7 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
                     OutlinedButton.icon(
                       onPressed: () => context.go('/home'),
                       icon: const Icon(Icons.dashboard_outlined),
-                      label: const Text('Open dashboard'),
+                      label: const Text('На главную'),
                     ),
                   ],
                 ],
