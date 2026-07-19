@@ -48,8 +48,36 @@ class BanksApi {
 
   final Dio _dio;
 
-  /// Multipart upload — backend path may land in parallel: POST /banks/statements/upload
+  /// Multipart upload — rebuild FormData once after 401 (streams aren't replayable).
   Future<StatementUploadResult> uploadStatement({
+    required String bankCode,
+    required String filePath,
+    required String fileName,
+  }) async {
+    // Warm the session so access token is present before multipart.
+    try {
+      await _dio.get<dynamic>('/auth/me');
+    } catch (_) {
+      // Upload surfaces a clear login error if still unauthorized.
+    }
+
+    try {
+      return await _postUpload(
+        bankCode: bankCode,
+        filePath: filePath,
+        fileName: fileName,
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode != 401) rethrow;
+      return _postUpload(
+        bankCode: bankCode,
+        filePath: filePath,
+        fileName: fileName,
+      );
+    }
+  }
+
+  Future<StatementUploadResult> _postUpload({
     required String bankCode,
     required String filePath,
     required String fileName,

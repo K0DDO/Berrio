@@ -17,7 +17,8 @@ const _banks = <({String code, String label, String instruction})>[
     code: 'tbank',
     label: 'Т-Банк',
     instruction:
-        'Т-Банк → Операции → Выписка за период → PDF/CSV/XLSX → загрузите файл.',
+        'Лучше CSV: на компьютере tbank.ru → Операции → период → Поделиться → CSV. '
+        'PDF часто без текста и не разбирается.',
   ),
   (
     code: 'alfa',

@@ -21,6 +21,16 @@ _AMOUNT_RE = re.compile(r"(?P<amount>-?\d{1,3}(?:[\s\u00a0]\d{3})*(?:[.,]\d{2})|
 _DATE_RE = re.compile(r"(?P<d>\d{2}[./]\d{2}[./]\d{2,4}|\d{4}-\d{2}-\d{2})")
 
 
+def _decode_text(content: bytes) -> str:
+    """T-Bank/Sber exports are often Windows-1251; prefer UTF-8 when valid."""
+    if content.startswith(b"\xef\xbb\xbf"):
+        return content.decode("utf-8-sig")
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content.decode("cp1251", errors="replace")
+
+
 def _parse_amount(raw: str) -> Decimal | None:
     cleaned = (
         raw.strip()
@@ -40,6 +50,9 @@ def _parse_amount(raw: str) -> Decimal | None:
 
 def _parse_date(raw: str) -> datetime | None:
     text = raw.strip()
+    # T-Bank: "19.07.2026 12:34:56" or "19.07.2026"
+    if " " in text:
+        text = text.split(" ", 1)[0]
     for fmt in ("%d.%m.%Y", "%d/%m/%Y", "%Y-%m-%d", "%d.%m.%y", "%d/%m/%y"):
         try:
             dt = datetime.strptime(text, fmt)
@@ -73,19 +86,62 @@ def _row_tx(
 
 class CsvStatementParser:
     def parse(self, *, filename: str, content: bytes, bank_code: str) -> list[NormalizedBankTx]:
-        text = content.decode("utf-8-sig", errors="replace")
-        # Try delimiter detection
-        sample = text[:2048]
+        text = _decode_text(content)
+        # Skip T-Bank / Sber title rows before the header line
+        lines = text.splitlines()
+        header_idx = 0
+        for i, line in enumerate(lines[:30]):
+            low = line.lower()
+            if ("дата" in low or "date" in low) and (
+                "сумм" in low or "amount" in low or "оборот" in low
+            ):
+                header_idx = i
+                break
+        body = "\n".join(lines[header_idx:])
+
+        sample = body[:2048]
         delimiter = ";" if sample.count(";") >= sample.count(",") else ","
-        reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+        reader = csv.DictReader(io.StringIO(body), delimiter=delimiter)
         if reader.fieldnames is None:
             return self._parse_loose_lines(text, bank_code)
 
-        fields = {f.lower().strip(): f for f in reader.fieldnames if f}
-        date_key = _pick(fields, ("дата", "date", "booking date", "операция"))
-        amount_key = _pick(fields, ("сумма", "amount", "sum", "оборот"))
+        fields = {f.lower().strip().strip('"'): f for f in reader.fieldnames if f}
+        date_key = _pick(
+            fields,
+            (
+                "дата платежа",
+                "дата операции",
+                "дата",
+                "date",
+                "booking date",
+                "операция",
+            ),
+        )
+        amount_key = _pick(
+            fields,
+            (
+                "сумма платежа",
+                "сумма операции",
+                "сумма",
+                "amount",
+                "sum",
+                "оборот",
+                "сумма в валюте счёта",
+            ),
+        )
         merchant_key = _pick(
-            fields, ("описание", "merchant", "назначение", "details", "контрагент", "place")
+            fields,
+            (
+                "описание",
+                "merchant",
+                "назначение",
+                "details",
+                "контрагент",
+                "place",
+                "название",
+                "category",
+                "категория",
+            ),
         )
         if not amount_key:
             return self._parse_loose_lines(text, bank_code)
@@ -99,6 +155,8 @@ class CsvStatementParser:
                 _parse_date(str(row.get(date_key, ""))) if date_key else None
             ) or datetime.now(UTC)
             merchant = str(row.get(merchant_key, "")).strip() if merchant_key else "Операция"
+            if merchant_key and merchant_key.lower().startswith("категор") and len(merchant) < 3:
+                merchant = "Операция"
             txs.append(
                 _row_tx(
                     bank_code=bank_code,
@@ -146,7 +204,6 @@ class ExcelStatementParser:
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
             return []
-        # Convert to CSV-like text for reuse
         buf = io.StringIO()
         writer = csv.writer(buf, delimiter=";")
         for row in rows:
@@ -168,12 +225,15 @@ class PdfStatementParser:
                 parts.append(page.extract_text() or "")
             text = "\n".join(parts)
         except Exception:
-            # Best-effort: latin1 dump of binary is useless; fail clearly
             raise ValueError(
-                "Не удалось извлечь текст из PDF — сохраните выписку как CSV"
+                "Не удалось извлечь текст из PDF — в Т-Банке экспортируйте CSV "
+                "(Операции → Поделиться → CSV)"
             ) from None
         if not text.strip():
-            raise ValueError("PDF без текста — экспортируйте выписку в CSV")
+            raise ValueError(
+                "PDF без текста — экспортируйте выписку в CSV "
+                "(Т-Банк: Операции → Поделиться → CSV)"
+            )
         return CsvStatementParser()._parse_loose_lines(text, bank_code)
 
 
@@ -204,7 +264,6 @@ def parse_statement_file(
         return ExcelStatementParser().parse(filename=filename, content=content, bank_code=code)
     if lower.endswith(".pdf"):
         return PdfStatementParser().parse(filename=filename, content=content, bank_code=code)
-    # sniff
     if content[:4] == b"%PDF":
         return PdfStatementParser().parse(filename=filename, content=content, bank_code=code)
     return CsvStatementParser().parse(filename=filename, content=content, bank_code=code)

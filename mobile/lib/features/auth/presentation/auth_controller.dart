@@ -127,6 +127,11 @@ class AuthController extends StateNotifier<AuthState> {
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
+  /// Called when API refresh fails — drop UI session so user returns to login.
+  void markSessionExpired() {
+    state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
   String _messageFromDio(DioException e) {
     final data = e.response?.data;
     if (data is Map && data['detail'] != null) {
