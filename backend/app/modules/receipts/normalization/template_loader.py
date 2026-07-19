@@ -57,7 +57,9 @@ async def build_normalizer(
     user_id: UUID | None = None,
 ) -> LineItemNormalizer:
     """Load system + user templates and build a LineItemNormalizer."""
-    conditions = [MerchantReceiptTemplate.user_id.is_(None)]
+    from sqlalchemy.sql.elements import ColumnElement
+
+    conditions: list[ColumnElement[bool]] = [MerchantReceiptTemplate.user_id.is_(None)]
     if user_id is not None:
         conditions.append(MerchantReceiptTemplate.user_id == user_id)
     result = await session.execute(select(MerchantReceiptTemplate).where(or_(*conditions)))
