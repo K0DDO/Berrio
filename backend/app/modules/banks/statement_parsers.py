@@ -17,12 +17,8 @@ class StatementParser(Protocol):
     def parse(self, *, filename: str, content: bytes, bank_code: str) -> list[NormalizedBankTx]: ...
 
 
-_AMOUNT_RE = re.compile(
-    r"(?P<amount>-?\d{1,3}(?:[\s\u00a0]\d{3})*(?:[.,]\d{2})|-?\d+[.,]\d{2})"
-)
-_DATE_RE = re.compile(
-    r"(?P<d>\d{2}[./]\d{2}[./]\d{2,4}|\d{4}-\d{2}-\d{2})"
-)
+_AMOUNT_RE = re.compile(r"(?P<amount>-?\d{1,3}(?:[\s\u00a0]\d{3})*(?:[.,]\d{2})|-?\d+[.,]\d{2})")
+_DATE_RE = re.compile(r"(?P<d>\d{2}[./]\d{2}[./]\d{2,4}|\d{4}-\d{2}-\d{2})")
 
 
 def _parse_amount(raw: str) -> Decimal | None:
@@ -144,9 +140,7 @@ class ExcelStatementParser:
         try:
             from openpyxl import load_workbook
         except ImportError as exc:
-            raise ValueError(
-                "Для Excel установите openpyxl или загрузите CSV"
-            ) from exc
+            raise ValueError("Для Excel установите openpyxl или загрузите CSV") from exc
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
         rows = list(ws.iter_rows(values_only=True))
@@ -175,7 +169,9 @@ class PdfStatementParser:
             text = "\n".join(parts)
         except Exception:
             # Best-effort: latin1 dump of binary is useless; fail clearly
-            raise ValueError("Не удалось извлечь текст из PDF — сохраните выписку как CSV") from None
+            raise ValueError(
+                "Не удалось извлечь текст из PDF — сохраните выписку как CSV"
+            ) from None
         if not text.strip():
             raise ValueError("PDF без текста — экспортируйте выписку в CSV")
         return CsvStatementParser()._parse_loose_lines(text, bank_code)

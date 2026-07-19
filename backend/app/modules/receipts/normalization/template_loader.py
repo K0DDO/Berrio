@@ -60,9 +60,7 @@ async def build_normalizer(
     conditions = [MerchantReceiptTemplate.user_id.is_(None)]
     if user_id is not None:
         conditions.append(MerchantReceiptTemplate.user_id == user_id)
-    result = await session.execute(
-        select(MerchantReceiptTemplate).where(or_(*conditions))
-    )
+    result = await session.execute(select(MerchantReceiptTemplate).where(or_(*conditions)))
     rows = list(result.scalars().all())
     by_key: dict[str, list[MerchantReceiptTemplate]] = {}
     for row in rows:

@@ -139,7 +139,9 @@ class FinancialHealthService:
                 score += 4
 
             if ent_share >= 0.2 and income >= Decimal("60000"):
-                negative.append(f"развлечения {ent_share:.0%} расходов — есть запас для оптимизации")
+                negative.append(
+                    f"развлечения {ent_share:.0%} расходов — есть запас для оптимизации"
+                )
                 score -= 5
             elif ent_share > 0 and ent_share < 0.15:
                 positive.append("развлечения без перекоса")
@@ -180,9 +182,7 @@ class FinancialHealthService:
 
         return FinancialHealthResult(user_id=user_id, score=score, factors=factors)
 
-    async def _category_shares(
-        self, receipts: list, spend: Decimal
-    ) -> dict[str, float]:
+    async def _category_shares(self, receipts: list, spend: Decimal) -> dict[str, float]:
         if spend <= 0 or not receipts:
             return {}
         cat_ids = {i.category_id for r in receipts for i in r.items if i.category_id}
@@ -201,9 +201,11 @@ class FinancialHealthService:
         for receipt in receipts:
             for item in receipt.items:
                 amount = item.sum or Decimal("0")
-                label = names.get(item.category_id, (item.name_raw or "").lower()) if item.category_id else (
-                    item.name_raw or ""
-                ).lower()
+                label = (
+                    names.get(item.category_id, (item.name_raw or "").lower())
+                    if item.category_id
+                    else (item.name_raw or "").lower()
+                )
                 if any(h in label for h in _FOOD_HINTS):
                     buckets["food"] += amount
                 elif any(h in label for h in _ENTERTAIN_HINTS):
