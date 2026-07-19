@@ -60,6 +60,7 @@ class ReceiptDto {
     this.errorMessage,
     this.requiresConfirmation = false,
     this.warnings = const [],
+    this.recognition,
     this.items = const [],
   });
 
@@ -74,9 +75,11 @@ class ReceiptDto {
   final String? errorMessage;
   final bool requiresConfirmation;
   final List<String> warnings;
+  final Map<String, dynamic>? recognition;
   final List<ReceiptItemDto> items;
 
   factory ReceiptDto.fromJson(Map<String, dynamic> json) {
+    final recognitionRaw = json['recognition'];
     return ReceiptDto(
       id: json['id'] as String,
       fn: json['fn'] as String,
@@ -93,6 +96,9 @@ class ReceiptDto {
       warnings: (json['warnings'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),
+      recognition: recognitionRaw is Map
+          ? Map<String, dynamic>.from(recognitionRaw)
+          : null,
       items: (json['items'] as List<dynamic>? ?? [])
           .map((e) => ReceiptItemDto.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),

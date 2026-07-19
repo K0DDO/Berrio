@@ -128,6 +128,33 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
       setState(() {
         _purchasedAt = receipt.purchasedAt;
         _items = receipt.items.map(_EditableItem.fromDto).toList();
+        // Fallback: recognition JSON items if API returned empty list.
+        if (_items.isEmpty && receipt.recognition is Map) {
+          final raw = receipt.recognition!['items'];
+          if (raw is List) {
+            for (final e in raw) {
+              if (e is! Map) continue;
+              final map = Map<String, dynamic>.from(e);
+              final name = map['name']?.toString() ??
+                  (map['value'] is Map
+                      ? (map['value'] as Map)['name']?.toString()
+                      : null);
+              if (name == null || name.trim().isEmpty) continue;
+              _items.add(
+                _EditableItem(
+                  name: name,
+                  nameDisplay: map['name_display']?.toString() ?? name,
+                  qty: map['qty']?.toString() ?? '1',
+                  price: map['price']?.toString() ?? '0',
+                  sum: map['sum']?.toString() ??
+                      map['price']?.toString() ??
+                      '0',
+                  categorySlug: map['category_slug']?.toString(),
+                ),
+              );
+            }
+          }
+        }
         _warnings = List<String>.from(receipt.warnings);
         _loaded = true;
       });
@@ -386,17 +413,28 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   children: [
-                    TextFormField(
-                      initialValue: item.nameDisplay ?? item.name,
-                      decoration: const InputDecoration(
-                        labelText: 'Название',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (v) {
-                        item.nameDisplay = v;
-                        item.name = v;
-                      },
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: item.nameDisplay ?? item.name,
+                            decoration: const InputDecoration(
+                              labelText: 'Название',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (v) {
+                              item.nameDisplay = v;
+                              item.name = v;
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Удалить',
+                          onPressed: () => setState(() => _items.removeAt(index)),
+                          icon: Icon(Icons.delete_outline, color: scheme.error),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -475,6 +513,21 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
               ),
             );
           }),
+          OutlinedButton.icon(
+            onPressed: () => setState(() {
+              _items.add(
+                _EditableItem(
+                  name: '',
+                  nameDisplay: '',
+                  qty: '1',
+                  price: '0',
+                  sum: '0',
+                ),
+              );
+            }),
+            icon: const Icon(Icons.add),
+            label: const Text('Добавить позицию'),
+          ),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: _saving ? null : () => _submit(saveAsDraft: false),

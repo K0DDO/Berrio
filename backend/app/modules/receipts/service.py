@@ -181,31 +181,12 @@ class ReceiptService:
             )
 
             receipt.items.clear()
+            draft_items = structured.items
             if auto_ok:
                 receipt.status = ReceiptStatus.DONE
-                normalizer = await self._ensure_normalizer(user_id)
-                for line in data.items:
-                    normalized = normalizer.normalize(line.name, merchant=receipt.store_name)
-                    receipt.items.append(
-                        ReceiptItem(
-                            name_raw=line.name,
-                            name_display=normalized.name_display[:512],
-                            qty=line.qty,
-                            price=line.price,
-                            sum=line.sum,
-                        )
-                    )
-                await self._categorization.apply_to_receipt_items(
-                    list(receipt.items), user_id=user_id
+                await self._apply_structured_items(
+                    receipt, draft_items, user_id, resolve_products=True
                 )
-                for item in receipt.items:
-                    await self._products.resolve_for_receipt_item(
-                        item,
-                        user_id=user_id,
-                        store_name=receipt.store_name,
-                        purchased_at=receipt.purchased_at,
-                        category_id=item.category_id,
-                    )
                 await self._bus.publish(
                     ReceiptFetchedEvent(
                         actor_user_id=user_id,
@@ -223,6 +204,11 @@ class ReceiptService:
                 await self._check_active_budgets(user_id)
             else:
                 receipt.status = ReceiptStatus.NEEDS_CONFIRMATION
+                # Keep draft lines so confirm UI is not empty.
+                if draft_items:
+                    await self._apply_structured_items(
+                        receipt, draft_items, user_id, resolve_products=False
+                    )
                 await self._audit.record(
                     action="receipt.needs_confirmation",
                     actor_user_id=user_id,
@@ -285,12 +271,13 @@ class ReceiptService:
             and structured.amount.value is not None
         )
 
+        purchased = self._parse_user_dt(structured.purchased_at.value or "") or datetime.now(UTC)
         pending = await self._repo.create_pending(
             user_id=user_id,
             fn=fn,
             fd=fd,
             fp=fp,
-            purchased_at=datetime.now(UTC),
+            purchased_at=purchased,
             total_amount=structured.amount.value,
         )
         # Reload with items relationship to avoid async lazy-load
@@ -309,7 +296,9 @@ class ReceiptService:
         if auto_ok:
             receipt.status = ReceiptStatus.DONE
             receipt.error_message = None
-            await self._apply_structured_items(receipt, structured.items, user_id)
+            await self._apply_structured_items(
+                receipt, structured.items, user_id, resolve_products=True
+            )
             await self._audit.record(
                 action="receipt.ocr_saved",
                 actor_user_id=user_id,
@@ -326,6 +315,10 @@ class ReceiptService:
                 or (validation.reasons[0] if validation.reasons else None)
                 or "Не удалось уверенно распознать чек"
             )[:500]
+            if structured.items:
+                await self._apply_structured_items(
+                    receipt, structured.items, user_id, resolve_products=False
+                )
             await self._audit.record(
                 action="receipt.ocr_needs_confirmation",
                 actor_user_id=user_id,
@@ -423,6 +416,13 @@ class ReceiptService:
         confirm_meta["confirmed_amount"] = (
             str(receipt.total_amount) if receipt.total_amount else None
         )
+        # Remember preference so future receipts don't nag about date.
+        if body.date_ignored or body.date_confirmed:
+            from app.modules.users.models import User
+
+            user = await self._session.get(User, user_id)
+            if user is not None and body.date_ignored:
+                user.ignore_receipt_time_default = True
 
         if body.save_as_draft:
             receipt.status = ReceiptStatus.NEEDS_CONFIRMATION
@@ -458,6 +458,8 @@ class ReceiptService:
         receipt: Receipt,
         items: list[RecognizedItem],
         user_id: UUID,
+        *,
+        resolve_products: bool = True,
     ) -> None:
         normalizer = await self._ensure_normalizer(user_id)
         for line in items:
@@ -472,10 +474,17 @@ class ReceiptService:
             if price is None and receipt.total_amount is not None and len(items) == 1:
                 price = receipt.total_amount
                 line_sum = receipt.total_amount
-            if price is None or line_sum is None:
-                continue
+            # Draft confirm: keep lines even without price (user will edit).
+            if price is None:
+                price = Decimal("0")
+            if line_sum is None:
+                line_sum = Decimal("0")
             normalized = normalizer.normalize(line.name, merchant=receipt.store_name)
             display = line.name_display or normalized.name_display
+            if normalized.volume_label and display and normalized.volume_label not in display:
+                display = f"{display} {normalized.volume_label}".strip()
+            elif normalized.weight_label and display and normalized.weight_label not in display:
+                display = f"{display} {normalized.weight_label}".strip()
             receipt.items.append(
                 ReceiptItem(
                     name_raw=line.name[:512],
@@ -486,6 +495,8 @@ class ReceiptService:
                 )
             )
         await self._categorization.apply_to_receipt_items(list(receipt.items), user_id=user_id)
+        if not resolve_products:
+            return
         for item in receipt.items:
             await self._products.resolve_for_receipt_item(
                 item,
@@ -603,6 +614,30 @@ class ReceiptService:
         return [await self._to_out(r) for r in rows], total
 
     async def _to_out(self, receipt: Receipt) -> ReceiptOut:
+        from app.modules.users.models import User
+
+        # Hydrate draft items from recognition_json when DB lines are empty.
+        if not receipt.items and receipt.recognition_json:
+            try:
+                meta = json.loads(receipt.recognition_json)
+                raw_items = meta.get("items") or []
+                recognized: list[RecognizedItem] = []
+                for raw in raw_items:
+                    if isinstance(raw, dict):
+                        # StructuredReceipt dumps ConfidenceField items as flat RecognizedItem
+                        # or nested — accept both.
+                        if "name" in raw:
+                            recognized.append(RecognizedItem.model_validate(raw))
+                        elif isinstance(raw.get("value"), dict) and "name" in raw["value"]:
+                            recognized.append(RecognizedItem.model_validate(raw["value"]))
+                if recognized:
+                    await self._apply_structured_items(
+                        receipt, recognized, receipt.user_id, resolve_products=False
+                    )
+                    await self._session.flush()
+            except Exception:  # noqa: BLE001
+                pass
+
         cat_ids = {i.category_id for i in receipt.items if i.category_id}
         cat_names: dict[UUID, str] = {}
         if cat_ids:
@@ -651,6 +686,15 @@ class ReceiptService:
             except json.JSONDecodeError:
                 recognition = None
 
+        skip_date = False
+        user = await self._session.get(User, receipt.user_id)
+        if user is not None and user.ignore_receipt_time_default:
+            skip_date = True
+        if recognition and (
+            recognition.get("date_ignored") or recognition.get("date_confirmed")
+        ):
+            skip_date = True
+
         warnings = build_receipt_warnings(
             store_name=receipt.store_name,
             total_amount=receipt.total_amount,
@@ -658,11 +702,15 @@ class ReceiptService:
             item_names=[i.name_raw for i in receipt.items],
             item_sums=[i.sum for i in receipt.items if i.sum is not None],
             error_message=receipt.error_message if receipt.status != ReceiptStatus.DONE else None,
+            skip_date_warnings=skip_date,
         )
         if recognition and isinstance(recognition.get("validation_reasons"), list):
             for reason in recognition["validation_reasons"]:
-                if reason not in warnings:
-                    warnings.append(str(reason))
+                text = str(reason)
+                if skip_date and "дат" in text.lower():
+                    continue
+                if text not in warnings:
+                    warnings.append(text)
 
         return ReceiptOut(
             id=receipt.id,

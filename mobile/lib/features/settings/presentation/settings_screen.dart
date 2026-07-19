@@ -114,7 +114,7 @@ class SettingsScreen extends ConsumerWidget {
     final unlock = ref.watch(unlockConfigProvider) ?? UnlockConfig.disabled;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: const Text('Настройки')),
       body: ListView(
         children: [
           const ListTile(
@@ -162,6 +162,19 @@ class SettingsScreen extends ConsumerWidget {
                     current: profile.monthlySavingsTarget,
                   ),
                 ),
+                SwitchListTile(
+                  title: const Text('Не спрашивать дату чека'),
+                  subtitle: const Text(
+                    'Пропускать предупреждение «Проверьте дату» при сканировании',
+                  ),
+                  value: profile.ignoreReceiptTimeDefault,
+                  onChanged: (v) async {
+                    await ref.read(settingsApiProvider).patchProfile({
+                      'ignore_receipt_time_default': v,
+                    });
+                    ref.invalidate(userProfileProvider);
+                  },
+                ),
               ],
             ),
           ),
@@ -192,36 +205,36 @@ class SettingsScreen extends ConsumerWidget {
             ),
             error: (e, _) => Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Failed: $e'),
+              child: Text('Ошибка: $e'),
             ),
             data: (prefs) => Column(
               children: [
                 const ListTile(
-                  title: Text('Notification preferences'),
-                  subtitle: Text('Choose which explainable alerts Berrio may send'),
+                  title: Text('Уведомления'),
+                  subtitle: Text('Какие понятные алерты может присылать Berrio'),
                 ),
                 SwitchListTile(
-                  title: const Text('Price changes'),
+                  title: const Text('Изменения цен'),
                   value: prefs.priceChangesEnabled,
                   onChanged: (v) => _patch(ref, {'price_changes_enabled': v}),
                 ),
                 SwitchListTile(
-                  title: const Text('Budget alerts'),
+                  title: const Text('Бюджет'),
                   value: prefs.budgetAlertsEnabled,
                   onChanged: (v) => _patch(ref, {'budget_alerts_enabled': v}),
                 ),
                 SwitchListTile(
-                  title: const Text('Goal alerts'),
+                  title: const Text('Цели'),
                   value: prefs.goalAlertsEnabled,
                   onChanged: (v) => _patch(ref, {'goal_alerts_enabled': v}),
                 ),
                 SwitchListTile(
-                  title: const Text('AI insights'),
+                  title: const Text('ИИ-инсайты'),
                   value: prefs.aiInsightsEnabled,
                   onChanged: (v) => _patch(ref, {'ai_insights_enabled': v}),
                 ),
                 SwitchListTile(
-                  title: const Text('Unusual spending'),
+                  title: const Text('Необычные траты'),
                   value: prefs.unusualSpendingEnabled,
                   onChanged: (v) => _patch(ref, {'unusual_spending_enabled': v}),
                 ),

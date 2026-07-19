@@ -162,6 +162,7 @@ def build_receipt_warnings(
     item_names: list[str],
     item_sums: list[Decimal],
     error_message: str | None = None,
+    skip_date_warnings: bool = False,
 ) -> list[str]:
     """Runtime warnings for API/UI after OFD or draft save."""
     warnings: list[str] = []
@@ -180,11 +181,12 @@ def build_receipt_warnings(
             Decimal("1.00"), total_amount * Decimal("0.15")
         ):
             warnings.append("Сумма позиций не сходится с итогом")
-    if purchased_at is not None:
-        iso = purchased_at.isoformat()
-        warnings.extend(_date_warnings(iso, now=datetime.now(UTC)))
-    elif purchased_at is None:
-        warnings.append("Проверьте дату")
+    if not skip_date_warnings:
+        if purchased_at is not None:
+            iso = purchased_at.isoformat()
+            warnings.extend(_date_warnings(iso, now=datetime.now(UTC)))
+        else:
+            warnings.append("Проверьте дату")
     # de-dupe preserving order
     seen: set[str] = set()
     out: list[str] = []
