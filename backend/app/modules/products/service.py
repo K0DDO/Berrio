@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -59,7 +60,7 @@ class ProductService:
                 price=item.price,
                 quantity=item.qty,
                 unit=unit,
-                purchased_at=purchased_at,
+                purchased_at=purchased_at or datetime.now(UTC),
                 receipt_item_id=item.id,
                 user_id=user_id,
             )

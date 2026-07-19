@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../shared/refresh.dart';
 import '../../../shared/widgets/journey_state_panel.dart';
 import '../../sync/sync_providers.dart';
+import '../data/receipts_api.dart';
 import '../domain/qr_fiscal_parser.dart';
 
 enum ScanPhase { idle, scanning, processing, success, error, offline, permission }
@@ -23,6 +26,7 @@ class ScanReceiptScreen extends ConsumerStatefulWidget {
 class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
     with WidgetsBindingObserver {
   final _parser = const QrFiscalParser();
+  final _imagePicker = ImagePicker();
   MobileScannerController? _controller;
   var _phase = ScanPhase.idle;
   String? _message;
@@ -142,6 +146,12 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
     super.dispose();
   }
 
+  void _goToConfirm(String receiptId) {
+    // Phase 1: after sync, open confirm whenever we have a receipt id
+    // (covers needs_confirmation, warnings, and happy-path review).
+    context.push('/receipts/$receiptId/confirm');
+  }
+
   Future<void> _handleRaw(String raw, {required bool syncNow}) async {
     if (_phase == ScanPhase.processing) return;
     final parsed = _parser.parse(raw);
@@ -179,11 +189,15 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
                 r.synced,
           );
           refreshMoneySurfaces(ref);
+          final receiptId = match.isEmpty ? null : match.first.id;
           setState(() {
             _phase = ScanPhase.success;
-            _receiptId = match.isEmpty ? null : match.first.id;
+            _receiptId = receiptId;
             _message = 'Receipt loaded. Categories assigned — dashboard updated.';
           });
+          if (receiptId != null && mounted) {
+            _goToConfirm(receiptId);
+          }
         } else if (result.lastError != null) {
           setState(() {
             _phase = ScanPhase.error;
@@ -211,6 +225,177 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
         _handled = false;
       });
     }
+  }
+
+  Future<void> _recognizeFromScreenshot() async {
+    if (_phase == ScanPhase.processing) return;
+    final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (file == null || !mounted) return;
+
+    setState(() {
+      _phase = ScanPhase.processing;
+      _message = 'Looking for fiscal QR in the image…';
+    });
+
+    try {
+      await _controller?.stop();
+    } catch (_) {}
+
+    MobileScannerController? temp;
+    try {
+      final controller = _controller ??
+          (temp = MobileScannerController(
+            autoStart: false,
+            formats: const [BarcodeFormat.qrCode],
+          ));
+      final capture = await controller.analyzeImage(file.path);
+      String? raw;
+      if (capture != null) {
+        for (final barcode in capture.barcodes) {
+          final value = barcode.rawValue;
+          if (value != null && value.isNotEmpty) {
+            raw = value;
+            break;
+          }
+        }
+      }
+      if (raw == null) {
+        // No QR — fall back to on-device OCR → analyze-text (photo never uploaded).
+        await _analyzeImageViaOcr(file.path);
+        return;
+      }
+      _handled = true;
+      await _handleRaw(raw, syncNow: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phase = ScanPhase.error;
+        _message = e.toString();
+        _handled = false;
+      });
+      await _safeStart();
+    } finally {
+      await temp?.dispose();
+    }
+  }
+
+  Future<void> _analyzeImageViaOcr(String imagePath) async {
+    setState(() {
+      _phase = ScanPhase.processing;
+      _message = 'QR не найден — распознаём текст чека…';
+    });
+    try {
+      final input = InputImage.fromFilePath(imagePath);
+      final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      final recognized = await recognizer.processImage(input);
+      await recognizer.close();
+      final text = recognized.text.trim();
+      if (text.length < 8) {
+        if (!mounted) return;
+        final pasted = await _promptPasteReceiptText();
+        if (pasted == null || pasted.trim().isEmpty) {
+          setState(() {
+            _phase = ScanPhase.scanning;
+            _message = null;
+            _handled = false;
+          });
+          await _safeStart();
+          return;
+        }
+        await _submitOcrText(pasted.trim());
+        return;
+      }
+      await _submitOcrText(text);
+    } catch (e) {
+      if (!mounted) return;
+      final pasted = await _promptPasteReceiptText(
+        hint: 'OCR недоступен ($e). Вставьте текст чека вручную:',
+      );
+      if (pasted == null || pasted.trim().isEmpty) {
+        setState(() {
+          _phase = ScanPhase.error;
+          _message = 'Не удалось распознать текст. Попробуйте QR или вставку.';
+          _handled = false;
+        });
+        await _safeStart();
+        return;
+      }
+      await _submitOcrText(pasted.trim());
+    }
+  }
+
+  Future<String?> _promptPasteReceiptText({String? hint}) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Текст чека'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(hint ?? 'Вставьте или введите текст с чека:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Магазин…\nМолоко 89…',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Распознать'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitOcrText(String text) async {
+    setState(() {
+      _phase = ScanPhase.processing;
+      _message = 'Отправляем текст в Berrio…';
+    });
+    try {
+      final result = await ref.read(receiptsApiProvider).analyzeText(text);
+      refreshMoneySurfaces(ref);
+      if (!mounted) return;
+      if (result.receiptId != null) {
+        context.push('/receipts/${result.receiptId}/confirm');
+        setState(() {
+          _phase = ScanPhase.scanning;
+          _message = null;
+          _handled = false;
+          _receiptId = result.receiptId;
+        });
+      } else {
+        setState(() {
+          _phase = ScanPhase.error;
+          _message = result.reason ?? 'Не удалось разобрать текст чека';
+          _handled = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phase = ScanPhase.error;
+        _message = e.toString();
+        _handled = false;
+      });
+    }
+    await _safeStart();
+  }
+
+  Future<void> _pasteReceiptText() async {
+    final pasted = await _promptPasteReceiptText();
+    if (pasted == null || pasted.trim().isEmpty) return;
+    _handled = true;
+    await _submitOcrText(pasted.trim());
   }
 
   Future<void> _resetToScan() async {
@@ -342,7 +527,19 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
                   ],
                   const Spacer(),
                   if (_phase == ScanPhase.scanning) ...[
+                    FilledButton.icon(
+                      onPressed: _recognizeFromScreenshot,
+                      icon: const Icon(Icons.image_outlined),
+                      label: const Text('Распознать чек со скриншота'),
+                    ),
+                    const SizedBox(height: 8),
                     FilledButton.tonalIcon(
+                      onPressed: _pasteReceiptText,
+                      icon: const Icon(Icons.paste_outlined),
+                      label: const Text('Вставить текст чека'),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
                       onPressed: () => _handleRaw(
                         't=20240115T1200&s=250.00&fn=9281000100123456&i=12345&fp=987654321&n=1',
                         syncNow: false,
@@ -354,9 +551,10 @@ class _ScanReceiptScreenState extends ConsumerState<ScanReceiptScreen>
                   if (_phase == ScanPhase.success) ...[
                     if (_receiptId != null)
                       FilledButton.icon(
-                        onPressed: () => context.push('/receipts/$_receiptId'),
-                        icon: const Icon(Icons.receipt_long),
-                        label: const Text('View receipt'),
+                        onPressed: () =>
+                            context.push('/receipts/$_receiptId/confirm'),
+                        icon: const Icon(Icons.fact_check_outlined),
+                        label: const Text('Подтвердить чек'),
                       ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(

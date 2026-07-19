@@ -80,7 +80,11 @@ class ReceiptsHistoryScreen extends ConsumerWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: item.serverId == null
                     ? null
-                    : () => context.push('/receipts/${item.serverId}'),
+                    : () => context.push(
+                          item.status == 'needs_confirmation'
+                              ? '/receipts/${item.serverId}/confirm'
+                              : '/receipts/${item.serverId}',
+                        ),
               );
             },
           );

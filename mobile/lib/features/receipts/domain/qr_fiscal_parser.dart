@@ -2,6 +2,9 @@
 ///
 /// Example:
 /// t=20240115T1230&s=250.00&fn=9281...&i=12345&fp=98765&n=1
+///
+/// Fiscal `t` is Moscow wall time — emit ISO with +03:00 so OFD lookup
+/// does not shift hours when the phone timezone differs.
 class QrFiscalParser {
   const QrFiscalParser();
 
@@ -39,20 +42,19 @@ class QrFiscalParser {
     };
   }
 
-  /// FNS QR `t` is usually `YYYYMMDDTHHMM` or `YYYYMMDDTHHMMSS`.
+  /// FNS QR `t` is usually `YYYYMMDDTHHMM` or `YYYYMMDDTHHMMSS` (Moscow local).
   static DateTime? _parseFiscalTime(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     final t = raw.trim();
     final match = RegExp(r'^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?$').firstMatch(t);
     if (match != null) {
-      return DateTime(
-        int.parse(match.group(1)!),
-        int.parse(match.group(2)!),
-        int.parse(match.group(3)!),
-        int.parse(match.group(4)!),
-        int.parse(match.group(5)!),
-        int.parse(match.group(6) ?? '0'),
-      );
+      final y = match.group(1)!;
+      final mo = match.group(2)!;
+      final d = match.group(3)!;
+      final h = match.group(4)!;
+      final mi = match.group(5)!;
+      final s = (match.group(6) ?? '00').padLeft(2, '0');
+      return DateTime.parse('$y-$mo-${d}T$h:$mi:$s+03:00');
     }
     return DateTime.tryParse(t);
   }

@@ -30,6 +30,7 @@ class ReceiptScanRequest(BaseModel):
 class ReceiptItemOut(BaseModel):
     id: UUID
     name_raw: str
+    name_display: str | None = None
     qty: Decimal
     price: Decimal
     sum: Decimal
@@ -54,6 +55,7 @@ class ReceiptOut(BaseModel):
     store_inn: str | None
     error_message: str | None = None
     requires_confirmation: bool = False
+    warnings: list[str] = []
     recognition: dict[str, Any] | None = None
     items: list[ReceiptItemOut] = []
     created_at: datetime

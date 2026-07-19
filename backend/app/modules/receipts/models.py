@@ -72,6 +72,7 @@ class ReceiptItem(Base):
         index=True,
     )
     name_raw: Mapped[str] = mapped_column(String(512), nullable=False)
+    name_display: Mapped[str | None] = mapped_column(String(512), nullable=True)
     qty: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False, default=Decimal("1"))
     price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     sum: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)

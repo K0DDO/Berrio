@@ -20,6 +20,11 @@ class RecognizedItem(BaseModel):
     price: Decimal | None = None
     sum: Decimal | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    name_display: str | None = None
+    brand: str | None = None
+    volume_label: str | None = None
+    weight_label: str | None = None
+    category_slug: str | None = None
 
 
 class StructuredReceipt(BaseModel):
@@ -35,6 +40,7 @@ class StructuredReceipt(BaseModel):
     requires_confirmation: bool = True
     success: bool = False
     reason: str | None = None
+    warnings: list[str] = Field(default_factory=list)
 
     def to_meta_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
@@ -65,6 +71,7 @@ class AnalyzeTextResponse(BaseModel):
     structured: StructuredReceipt
     receipt_id: str | None = None
     status: str | None = None
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ReceiptConfirmRequest(BaseModel):
@@ -74,3 +81,6 @@ class ReceiptConfirmRequest(BaseModel):
     category_slug: str | None = None
     items: list[RecognizedItem] = Field(default_factory=list)
     confirm_as_is: bool = False
+    save_as_draft: bool = False
+    date_ignored: bool = False
+    date_confirmed: bool = False

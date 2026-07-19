@@ -10,6 +10,7 @@ class ReceiptItemDto {
     required this.qty,
     required this.price,
     required this.sum,
+    this.nameDisplay,
     this.categoryId,
     this.categoryName,
     this.productVariantId,
@@ -22,6 +23,7 @@ class ReceiptItemDto {
   final String qty;
   final String price;
   final String sum;
+  final String? nameDisplay;
   final String? categoryId;
   final String? categoryName;
   final String? productVariantId;
@@ -32,6 +34,7 @@ class ReceiptItemDto {
     return ReceiptItemDto(
       id: json['id'] as String,
       nameRaw: json['name_raw'] as String? ?? '',
+      nameDisplay: json['name_display'] as String?,
       qty: json['qty']?.toString() ?? '1',
       price: json['price']?.toString() ?? '0',
       sum: json['sum']?.toString() ?? '0',
@@ -55,6 +58,8 @@ class ReceiptDto {
     this.totalAmount,
     this.purchasedAt,
     this.errorMessage,
+    this.requiresConfirmation = false,
+    this.warnings = const [],
     this.items = const [],
   });
 
@@ -67,6 +72,8 @@ class ReceiptDto {
   final String? totalAmount;
   final DateTime? purchasedAt;
   final String? errorMessage;
+  final bool requiresConfirmation;
+  final List<String> warnings;
   final List<ReceiptItemDto> items;
 
   factory ReceiptDto.fromJson(Map<String, dynamic> json) {
@@ -82,11 +89,75 @@ class ReceiptDto {
           ? DateTime.tryParse(json['purchased_at'] as String)
           : null,
       errorMessage: json['error_message'] as String?,
+      requiresConfirmation: json['requires_confirmation'] as bool? ?? false,
+      warnings: (json['warnings'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
       items: (json['items'] as List<dynamic>? ?? [])
           .map((e) => ReceiptItemDto.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
     );
   }
+}
+
+class ReceiptConfirmPayload {
+  ReceiptConfirmPayload({
+    this.storeName,
+    this.totalAmount,
+    this.purchasedAt,
+    this.items = const [],
+    this.confirmAsIs = false,
+    this.saveAsDraft = false,
+    this.dateIgnored = false,
+    this.dateConfirmed = false,
+  });
+
+  final String? storeName;
+  final String? totalAmount;
+  final String? purchasedAt;
+  final List<ReceiptConfirmItemPayload> items;
+  final bool confirmAsIs;
+  final bool saveAsDraft;
+  final bool dateIgnored;
+  final bool dateConfirmed;
+
+  Map<String, dynamic> toJson() => {
+        if (storeName != null) 'store_name': storeName,
+        if (totalAmount != null) 'total_amount': totalAmount,
+        if (purchasedAt != null) 'purchased_at': purchasedAt,
+        'items': items.map((e) => e.toJson()).toList(),
+        'confirm_as_is': confirmAsIs,
+        'save_as_draft': saveAsDraft,
+        'date_ignored': dateIgnored,
+        'date_confirmed': dateConfirmed,
+      };
+}
+
+class ReceiptConfirmItemPayload {
+  ReceiptConfirmItemPayload({
+    required this.name,
+    required this.qty,
+    required this.price,
+    required this.sum,
+    this.categorySlug,
+    this.nameDisplay,
+  });
+
+  final String name;
+  final String qty;
+  final String price;
+  final String sum;
+  final String? categorySlug;
+  final String? nameDisplay;
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'qty': qty,
+        'price': price,
+        'sum': sum,
+        if (categorySlug != null) 'category_slug': categorySlug,
+        if (nameDisplay != null) 'name_display': nameDisplay,
+      };
 }
 
 class ReceiptsApi {
@@ -123,6 +194,51 @@ class ReceiptsApi {
     final response = await _dio.get<Map<String, dynamic>>('/receipts/$id');
     return ReceiptDto.fromJson(response.data!);
   }
+
+  Future<ReceiptDto> confirm(String receiptId, ReceiptConfirmPayload payload) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/receipts/$receiptId/confirm',
+      data: payload.toJson(),
+    );
+    return ReceiptDto.fromJson(response.data!);
+  }
+
+  /// OCR / pasted text → server structures receipt (photos never uploaded).
+  Future<AnalyzeTextResult> analyzeText(String rawText, {bool persist = true}) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/receipts/analyze-text',
+      data: {'raw_text': rawText, 'persist': persist},
+    );
+    final data = response.data!;
+    return AnalyzeTextResult(
+      success: data['success'] as bool? ?? false,
+      requiresConfirmation: data['requires_confirmation'] as bool? ?? true,
+      reason: data['reason'] as String?,
+      receiptId: data['receipt_id']?.toString(),
+      status: data['status'] as String?,
+      warnings: (data['warnings'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+    );
+  }
+}
+
+class AnalyzeTextResult {
+  AnalyzeTextResult({
+    required this.success,
+    required this.requiresConfirmation,
+    this.reason,
+    this.receiptId,
+    this.status,
+    this.warnings = const [],
+  });
+
+  final bool success;
+  final bool requiresConfirmation;
+  final String? reason;
+  final String? receiptId;
+  final String? status;
+  final List<String> warnings;
 }
 
 final receiptsApiProvider = Provider<ReceiptsApi>((ref) {
