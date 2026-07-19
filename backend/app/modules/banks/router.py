@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
@@ -11,6 +11,7 @@ from app.modules.banks.service import (
     BankConnectionOut,
     BankService,
     ParseEmailRequest,
+    StatementUploadOut,
     TransactionOut,
 )
 from app.modules.families.permission_checker import (
@@ -54,6 +55,30 @@ async def parse_email(
     rows = await service.ingest_email(user_id, body)
     await session.commit()
     return [TransactionOut.model_validate(r) for r in rows]
+
+
+@router.post("/statements/upload", response_model=StatementUploadOut)
+async def upload_statement(
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    bank_code: Annotated[str, Form()] = "other",
+    file: UploadFile = File(...),
+) -> StatementUploadOut:
+    """Import PDF/CSV/Excel statement — never asks for bank login/password."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty file")
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large")
+    service = BankService(session)
+    result = await service.ingest_statement(
+        user_id,
+        bank_code=bank_code,
+        filename=file.filename or "statement.csv",
+        content=content,
+    )
+    await session.commit()
+    return result
 
 
 @router.get("/transactions", response_model=list[TransactionOut])

@@ -90,6 +90,7 @@ PARSERS: dict[str, BankParser] = {
     "sber": SberParser(),
     "alfa": TinkoffParser(),  # placeholder until dedicated parser
     "vtb": SberParser(),
+    "other": SberParser(),
 }
 
 
